@@ -1,0 +1,207 @@
+import { GoogleGenAI, Type } from "@google/genai";
+import { NutritionProfile, MealPlan, MacroNutrients } from "../types";
+
+// Ensure API key is present. In this environment, it's strictly process.env.API_KEY
+const apiKey = process.env.API_KEY || "";
+const ai = new GoogleGenAI({ apiKey });
+
+const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+const IMAGEN_MODEL = "imagen-4.0-generate-001";
+
+export async function callGemini(prompt: string, systemInstruction: string = "", isJson: boolean = false): Promise<any> {
+  if (!apiKey) {
+    console.warn("API Key is missing for Gemini.");
+    return isJson ? null : "API Key missing.";
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        systemInstruction: systemInstruction || "Você é o PhD Diretor Científico da ABFIT.",
+        responseMimeType: isJson ? "application/json" : "text/plain",
+      }
+    });
+
+    if (isJson) {
+      try {
+        let text = response.text || "{}";
+        // Clean markdown code blocks if present
+        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+        return JSON.parse(text);
+      } catch (e) {
+        console.error("JSON Parse Error", e);
+        return null;
+      }
+    }
+
+    return response.text;
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    return isJson ? null : "Erro na ligação PhD.";
+  }
+}
+
+export async function generateExerciseImage(exerciseName: string): Promise<string | null> {
+  if (!apiKey) return null;
+  
+  // Refinamento Biomecânico Estrito e Correções de Posição (From PrescreveAI)
+  let biomechanicalRefinement = "Ensuring perfect biomechanics.";
+  const nameLower = exerciseName.toLowerCase();
+
+  if (nameLower.includes("supino reto") || (nameLower.includes("supino") && nameLower.includes("reto"))) {
+    biomechanicalRefinement = "CRITICAL BIOMECHANICS: Flat Bench Press. The athlete must be LYING COMPLETELY HORIZONTAL and FLAT on a bench. The weights are being pressed directly above the chest. The athlete MUST NOT be sitting or inclined.";
+  } else if (nameLower.includes("supino inclinado")) {
+    biomechanicalRefinement = "CRITICAL BIOMECHANICS: Incline Bench Press. The bench is at a 45-degree angle. The athlete is leaning back on the incline. The dumbbells or barbell are pressed from the upper chest towards the ceiling.";
+  } else if (nameLower.includes("crossover") || nameLower.includes("cross-over")) {
+    biomechanicalRefinement = "CRITICAL BIOMECHANICS: High-to-Low Cable Crossover. The athlete is standing. The arms move in an arc from a high position to a low-forward position. The hands MUST meet or cross exactly at the level of the NIPPLES (chest level) for maximum pec contraction.";
+  } else if (nameLower.includes("frontal")) {
+    biomechanicalRefinement = "CRITICAL BIOMECHANICS: Front Squat. The barbell rests on the front shoulders (front rack position), elbows held high and pointing forward. Barbell MUST NOT be on the back.";
+  } else if (nameLower.includes("agachamento livre") || nameLower.includes("back squat")) {
+    biomechanicalRefinement = "Traditional Back Squat. Barbell is resting on the upper back/trapezius.";
+  }
+
+  const prompt = `Cinema-grade 8k raw photograph of a muscular Black athlete perfectly executing the exercise "${exerciseName}" in a high-end futuristic gym. ${biomechanicalRefinement} Peak muscle contraction, glistening sweat, volumetric lighting, high contrast, wide shot, professional fitness photography.`;
+  
+  try {
+    const response = await ai.models.generateImages({
+        model: IMAGEN_MODEL,
+        prompt: prompt,
+        config: {
+          numberOfImages: 1,
+          outputMimeType: 'image/jpeg',
+          aspectRatio: '16:9',
+        },
+    });
+
+    const base64 = response.generatedImages?.[0]?.image?.imageBytes;
+    return base64 ? `data:image/jpeg;base64,${base64}` : null;
+  } catch (error) {
+    console.error("Imagen Error:", error);
+    // Fallback to null so UI shows placeholder
+    return null;
+  }
+}
+
+// --- Periodization AI ---
+
+export async function generatePeriodizationPlan(studentData: any): Promise<any> {
+  if (!apiKey) return null;
+
+  const isRunning = studentData.type === 'RUNNING';
+
+  const systemPrompt = `Você é um Especialista em ${isRunning ? 'Corrida de Rua' : 'Musculação e Treinamento de Força (EEFD/UFRJ)'}.
+    Foque estritamente na PERIODIZAÇÃO (variáveis de carga).
+    
+    TUDO EM PORTUGUÊS.
+    
+    ESTRUTURA DE RESPOSTA (JSON):
+    1. TITULO: Nome do Macrociclo.
+    2. VOLUME_POR_GRUPO: ${isRunning ? 'Volume semanal em KM' : 'Séries totais por GRUPO MUSCULAR por semana'}.
+    3. MICROCICLOS: Array de 4 semanas.
+    4. DETALHES_TREINO: Texto explicativo.
+    
+    LÓGICA BASEADA NA CONDIÇÃO:
+    - Sedentário/Voltando: Começo conservador, foco em técnica/volume baixo.
+    - Estagnado: Choque de volume/metodologia.
+    - Alta Performance: Intensidade próxima da falha ou pace alto.
+  `;
+
+  const userQuery = `Gere uma periodização de 4 semanas para ${studentData.name}.
+    Tipo: ${isRunning ? 'CORRIDA' : 'MUSCULAÇÃO'}
+    Objetivo: ${studentData.goal}.
+    Ritmo/Condição Atual: ${studentData.regularity}.
+    ${!isRunning ? `Divisão de Treino: ${studentData.splitPreference}.` : ''}
+    Dias por semana: ${studentData.daysPerWeek}.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: userQuery,
+      config: {
+        systemInstruction: systemPrompt,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          required: ["titulo", "volume_por_grupo", "microciclos", "detalhes_treino"],
+          properties: {
+            titulo: { type: Type.STRING },
+            volume_por_grupo: { type: Type.STRING },
+            microciclos: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  semana: { type: Type.NUMBER },
+                  foco: { type: Type.STRING },
+                  faixa_repeticoes: { type: Type.STRING, description: isRunning ? "Ex: Z2 60% ou Pace" : "Ex: 8-12 reps" },
+                  pse_alvo: { type: Type.STRING }
+                }
+              }
+            },
+            detalhes_treino: { type: Type.STRING }
+          }
+        }
+      }
+    });
+
+    let text = response.text || "{}";
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Periodization Error:", error);
+    return null;
+  }
+}
+
+// --- Nutrition AI Functions ---
+
+export async function generateAIMealPlan(profile: NutritionProfile): Promise<MealPlan | null> {
+  const prompt = `
+    Generate a one-day meal plan for a client with the following profile:
+    Goal: ${profile.goal}
+    Restrictions: ${profile.restrictions || "None"}
+    
+    Return a JSON object with this structure:
+    {
+      "breakfast": "Description of meal",
+      "lunch": "Description of meal",
+      "dinner": "Description of meal",
+      "snacks": "Description of snacks",
+      "targetMacros": {
+        "calories": number,
+        "protein": number (grams),
+        "carbs": number (grams),
+        "fat": number (grams)
+      }
+    }
+  `;
+  
+  const data = await callGemini(prompt, "You are a world-class Sports Nutritionist.", true);
+  if (data) {
+    return {
+      id: Date.now().toString(),
+      generatedDate: new Date().toISOString(),
+      goal: profile.goal,
+      ...data
+    };
+  }
+  return null;
+}
+
+export async function estimateFoodMacros(foodDescription: string): Promise<MacroNutrients | null> {
+  const prompt = `
+    Analyze the nutritional content of the following food/meal: "${foodDescription}".
+    Estimate the macronutrients.
+    Return ONLY a JSON object:
+    {
+      "calories": number,
+      "protein": number,
+      "carbs": number,
+      "fat": number
+    }
+  `;
+  
+  return await callGemini(prompt, "You are a precise nutrition analyzer.", true);
+}
