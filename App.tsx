@@ -74,18 +74,28 @@ export default function App() {
 
   useEffect(() => {
     const initAuth = async () => { 
+        // Check if we are using the mock API key from index.html
+        const config = window.__firebase_config;
+        if (config && config.apiKey === "mock-api-key") {
+            console.warn("ABFIT Elite: Running in DEMO mode with mock authentication.");
+            // Simulate an authenticated user
+            setUser({ uid: "demo-user", isAnonymous: true });
+            setLoading(false);
+            return;
+        }
+
         try { 
             await signInAnonymously(auth); 
         } catch (err) { 
             console.error("Auth error", err);
-            // Fallback for demo if auth fails unexpectedly
-            // But now we have real config, so this should work unless network issues/quota
+            // Fallback for demo if auth fails
+            setUser({ uid: "fallback-demo-user", isAnonymous: true });
             setLoading(false);
         } 
     };
     initAuth();
     
-    // Only listen to auth changes
+    // Only listen to auth changes if not manually set to demo user
     const unsub = onAuthStateChanged(auth, (u) => { 
         if (u) {
             setUser(u); 
@@ -98,13 +108,19 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     
+    // In demo mode, skipping real Firestore connection if likely to fail
+    if (user.uid === "demo-user" || user.uid === "fallback-demo-user") {
+        setStudents([]);
+        return;
+    }
+
     try {
         const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'students'));
         const unsub = onSnapshot(q, (snapshot) => { 
             setStudents(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student))); 
         }, (error) => {
-            console.warn("Firestore snapshot error:", error);
-            // Fallback if rules deny
+            console.warn("Firestore snapshot error (expected in demo if rules deny):", error);
+            // Fallback for demo if no backend access
             setStudents([]); 
         });
         return () => unsub();
@@ -170,20 +186,22 @@ export default function App() {
 
   const handleSaveData = async (sid: string, data: any) => {
     try { 
-      // Save if user is authenticated
-      if (user) {
+      // Only try to save if not in demo mode with mock user
+      if (user?.uid !== "demo-user" && user?.uid !== "fallback-demo-user") {
           const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', sid);
           await setDoc(docRef, data, { merge: true });
+      } else {
+        console.log("Demo Mode: Data not saved to backend", data);
       }
       
-      // Optimistic Update
+      // Local state update is critical for demo
       setStudents(prev => prev.map(s => s.id === sid ? { ...s, ...data } : s));
       if (selectedStudent && selectedStudent.id === sid) {
           setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
       }
     } catch (e) { 
         console.error("Save error", e); 
-        // Fallback Optimistic Update
+        // Mock update for demo
         if (selectedStudent && selectedStudent.id === sid) {
             setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
         }
