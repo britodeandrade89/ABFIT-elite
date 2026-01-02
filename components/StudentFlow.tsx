@@ -3,7 +3,7 @@ import {
   ArrowLeft, Dumbbell, CheckCircle2, HeartPulse, Trophy, 
   ChevronLeft, ChevronRight, Plus, X, SkipForward, Play,
   TrendingUp, Flame, Activity, Zap, Footprints, Loader2, Maximize2,
-  Timer, RotateCw, Power, FastForward
+  Timer, RotateCw, Power, FastForward, Calendar, History, Scale, Ruler, Brain
 } from 'lucide-react';
 import { Card, EliteFooter } from './Layout';
 import { Student, PhysicalAssessment, WorkoutHistoryEntry, AnalyticsData, PeriodizationPlan } from '../types';
@@ -77,9 +77,10 @@ function getCurrentMicrocycle(plan?: PeriodizationPlan) {
 interface SessionProps {
   user: Student;
   onBack: () => void;
+  onSave: (id: string, data: any) => void;
 }
 
-export function WorkoutSessionView({ user, onBack }: SessionProps) {
+export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
   const treino = user?.workouts?.[0];
   
   // New State for Set Tracking: { [exerciseId]: [completedSetIndices] }
@@ -96,6 +97,8 @@ export function WorkoutSessionView({ user, onBack }: SessionProps) {
   const [restTimerActive, setRestTimerActive] = useState(false);
   const [restTimeLeft, setRestTimeLeft] = useState(0);
   const [restTotalTime, setRestTotalTime] = useState(0);
+  
+  const [isFinishing, setIsFinishing] = useState(false);
 
   const activeMicrocycle = getCurrentMicrocycle(user.periodization);
 
@@ -186,6 +189,7 @@ export function WorkoutSessionView({ user, onBack }: SessionProps) {
   };
 
   const handleFinishWorkout = async () => {
+    setIsFinishing(true);
     const entry: WorkoutHistoryEntry = {
         id: Date.now().toString(),
         name: treino?.title || "Treino Realizado",
@@ -194,20 +198,21 @@ export function WorkoutSessionView({ user, onBack }: SessionProps) {
         timestamp: Date.now()
     };
 
+    const analytics = user.analytics || { exercises: {}, sessionsCompleted: 0, streakDays: 0 };
+    analytics.sessionsCompleted += 1;
+    analytics.lastSessionDate = new Date().toISOString();
+
     try {
-        const history = user.workoutHistory || [];
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', user.id);
-        await setDoc(docRef, { workoutHistory: [...history, entry] }, { merge: true });
-        
-        const analytics = user.analytics || { exercises: {}, sessionsCompleted: 0, streakDays: 0 };
-        analytics.sessionsCompleted += 1;
-        analytics.lastSessionDate = new Date().toISOString();
-        await setDoc(docRef, { analytics }, { merge: true });
+        await onSave(user.id, { 
+            workoutHistory: [...(user.workoutHistory || []), entry],
+            analytics: analytics
+        });
         
         onBack();
     } catch (e) {
         console.error("Error saving workout", e);
         alert("Erro ao salvar treino. Tente novamente.");
+        setIsFinishing(false);
     }
   };
 
@@ -367,17 +372,25 @@ export function WorkoutSessionView({ user, onBack }: SessionProps) {
           
           {/* COMPLETE WORKOUT BUTTON - FIXED BOTTOM OR IN FLOW */}
           <div className="pt-8 pb-10">
-              {isWorkoutComplete ? (
-                  <button 
-                    onClick={handleFinishWorkout}
-                    className="w-full py-6 bg-green-600 rounded-[2rem] font-black uppercase text-xl text-white shadow-[0_0_30px_rgba(22,163,74,0.4)] animate-in slide-in-from-bottom-4 active:scale-95 transition-transform flex items-center justify-center gap-3"
-                  >
-                     <Trophy size={24} className="text-green-200" /> FINALIZAR TREINO
-                  </button>
-              ) : (
-                <div className="text-center opacity-30 p-4 border border-dashed border-white/10 rounded-2xl">
-                    <p className="text-[9px] font-black uppercase text-zinc-500">Complete todos os exercícios para finalizar.</p>
-                </div>
+              <button 
+                onClick={handleFinishWorkout}
+                disabled={isFinishing}
+                className={`w-full py-6 rounded-[2rem] font-black uppercase text-xl text-white shadow-xl animate-in slide-in-from-bottom-4 active:scale-95 transition-transform flex items-center justify-center gap-3 ${isWorkoutComplete ? 'bg-green-600 shadow-[0_0_30px_rgba(22,163,74,0.4)]' : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                 {isFinishing ? (
+                    <Loader2 className="animate-spin" size={24} />
+                 ) : (
+                    <>
+                        <Trophy size={24} className={isWorkoutComplete ? "text-green-200" : "text-zinc-500"} /> 
+                        {isWorkoutComplete ? "FINALIZAR TREINO" : "ENCERRAR TREINO"}
+                    </>
+                 )}
+              </button>
+              
+              {!isWorkoutComplete && !isFinishing && (
+                <p className="text-[9px] font-bold text-center text-zinc-600 uppercase mt-4 tracking-widest">
+                    Alguns exercícios pendentes (Pode encerrar mesmo assim)
+                </p>
               )}
           </div>
 
@@ -452,69 +465,152 @@ export function WorkoutSessionView({ user, onBack }: SessionProps) {
   );
 }
 
-// --- WORKOUT COUNTER VIEW ---
 export function WorkoutCounterView({ student, onBack, onSaveHistory }: { student: Student, onBack: () => void, onSaveHistory: (h: WorkoutHistoryEntry[]) => void }) {
-  // Existing Implementation...
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
-  const [selectedWorkout, setSelectedWorkout] = useState('');
-  const [duration, setDuration] = useState('');
-  const [workoutDate, setWorkoutDate] = useState(new Date().toISOString().split('T')[0]);
+    const history = student.workoutHistory || [];
+    
+    // Sort by date desc
+    const sortedHistory = [...history].sort((a, b) => b.timestamp - a.timestamp);
 
-  const history = student.workoutHistory || [];
-  const prescribedWorkouts = [{ name: 'Treino A', color: 'bg-red-600' }, { name: 'Treino B', color: 'bg-blue-600' }, { name: 'Treino C', color: 'bg-emerald-600' }, { name: 'Corrida', color: 'bg-amber-600' }];
+    return (
+        <div className="p-6 pb-48 text-white overflow-y-auto h-screen text-left custom-scrollbar relative">
+            <header className="flex items-center gap-4 mb-10 text-left sticky top-0 bg-black/80 backdrop-blur-md z-40 py-4 -mx-6 px-6 border-b border-white/5">
+                <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white text-left hover:bg-red-600 transition-colors">
+                    <ArrowLeft size={20} className="text-zinc-400 group-hover:text-white"/>
+                </button>
+                <h2 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-left">
+                    Histórico de Treinos
+                </h2>
+            </header>
 
-  const handleAddCheckIn = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedWorkout || !duration) return;
-    const newEntry: WorkoutHistoryEntry = { id: Date.now().toString(), name: selectedWorkout, duration, date: workoutDate, timestamp: new Date(workoutDate).getTime() };
-    const newHistory = [...history, newEntry];
-    onSaveHistory(newHistory);
-    setIsCheckInModalOpen(false);
-  };
-  // Simplified for brevity - Assume Calendar rendering is the same as previous
-  return (
-    <div className="p-6 pb-48 animate-fadeIn text-white overflow-y-auto h-screen custom-scrollbar text-left">
-      <header className="flex items-center justify-between mb-8 text-white">
-        <div className="flex items-center gap-4 text-white">
-          <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white hover:bg-red-600 transition-colors"><ArrowLeft size={20}/></button>
-          <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">Contador PhD</h2>
+            <div className="grid grid-cols-2 gap-4 mb-8">
+                <Card className="p-5 bg-gradient-to-br from-zinc-900 to-black text-center">
+                    <h3 className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-2">Total</h3>
+                    <p className="text-3xl font-black text-white">{history.length}</p>
+                </Card>
+                 <Card className="p-5 bg-gradient-to-br from-zinc-900 to-black text-center border-red-900/30">
+                    <h3 className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-2">Streak</h3>
+                    <div className="flex items-center justify-center gap-2">
+                       <p className="text-3xl font-black text-red-600">{student.analytics?.streakDays || 0}</p>
+                       <TrendingUp size={16} className="text-red-600"/>
+                    </div>
+                 </Card>
+            </div>
+
+            <div className="space-y-4">
+                <h3 className="text-[12px] font-black uppercase text-zinc-400 tracking-widest pl-2 flex items-center gap-2">
+                    <History size={14}/> Últimas Sessões
+                </h3>
+                {sortedHistory.length === 0 ? (
+                    <p className="text-center text-zinc-500 text-xs py-10 italic">Nenhum treino registrado ainda.</p>
+                ) : (
+                    sortedHistory.map((h) => (
+                        <div key={h.id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex justify-between items-center">
+                            <div>
+                                <p className="font-black text-sm text-white uppercase italic">{h.name}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-[10px] font-bold text-zinc-500 bg-black px-2 py-0.5 rounded flex items-center gap-1">
+                                        <Calendar size={10}/> {new Date(h.date).toLocaleDateString('pt-BR')}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-zinc-500 bg-black px-2 py-0.5 rounded flex items-center gap-1">
+                                        <Timer size={10}/> {h.duration} min
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="w-8 h-8 rounded-full bg-green-900/20 flex items-center justify-center">
+                                <CheckCircle2 size={16} className="text-green-600"/>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+            
+            <EliteFooter />
         </div>
-        <button onClick={() => setIsCheckInModalOpen(true)} className="bg-red-600 px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg flex items-center gap-2 text-white hover:bg-red-700 transition-all"><Plus size={14}/> Check-in</button>
-      </header>
-      <div className="text-center py-20 opacity-50">Calendar Implementation...</div>
-      {/* Actual Calendar Implementation would be here */}
-    </div>
-  );
+    );
 }
 
-// --- STUDENT ASSESSMENT VIEW ---
 export function StudentAssessmentView({ student, onBack }: { student: Student, onBack: () => void }) {
-  const avs = useMemo(() => (student.physicalAssessments || []).sort((a,b) => new Date(b.data).getTime() - new Date(a.data).getTime()), [student]);
-  return (
-    <div className="p-6 pb-48 animate-fadeIn text-white overflow-y-auto h-screen custom-scrollbar text-left">
-      <header className="flex items-center gap-4 mb-10 text-left">
-        <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white text-left hover:bg-red-600 transition-colors"><ArrowLeft size={20}/></button>
-        <h2 className="text-xl font-black italic uppercase tracking-tight text-left">Avaliação Física</h2>
-      </header>
-      {avs.map(av => (
-        <Card key={`av-item-${av.id}`} className="p-8 mb-6 border-t-4 border-t-red-600 text-white text-left">
-          <div className="flex justify-between items-start mb-6 text-left">
-             <div className="text-left text-white"><p className="text-xs font-black uppercase text-zinc-500 text-left">Protocolo Consolidado</p><h4 className="text-lg font-black text-left">{new Date(av.data).toLocaleDateString()}</h4></div>
-             <div className="text-right text-white"><p className="text-2xl font-black text-red-600 italic text-right">{calculateAssessmentResults(av, student).bf}% BF</p></div>
-          </div>
-        </Card>
-      ))}
-      <EliteFooter />
-    </div>
-  );
+    const assessments = student.physicalAssessments || [];
+    const latest = assessments[0];
+    const results = latest ? calculateAssessmentResults(latest, student) : null;
+
+    return (
+        <div className="p-6 pb-48 text-white overflow-y-auto h-screen text-left custom-scrollbar relative">
+             <header className="flex items-center gap-4 mb-10 text-left sticky top-0 bg-black/80 backdrop-blur-md z-40 py-4 -mx-6 px-6 border-b border-white/5">
+                <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white text-left hover:bg-red-600 transition-colors">
+                    <ArrowLeft size={20} className="text-zinc-400 group-hover:text-white"/>
+                </button>
+                <h2 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-left">
+                    Avaliação Física
+                </h2>
+            </header>
+
+            {!latest ? (
+                <div className="text-center py-20 text-zinc-500">
+                    <Activity size={48} className="mx-auto mb-4 opacity-20"/>
+                    <p className="text-xs font-bold uppercase">Nenhuma avaliação registrada pelo professor.</p>
+                </div>
+            ) : (
+                <div className="space-y-6">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-6 text-center">
+                         <p className="text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-2">Data da Avaliação</p>
+                         <p className="text-xl font-black text-white">{new Date(latest.data).toLocaleDateString('pt-BR')}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <Card className="p-5 bg-zinc-900 border-zinc-800">
+                             <div className="flex items-center gap-2 mb-2 text-zinc-500">
+                                 <Scale size={14} />
+                                 <span className="text-[9px] font-black uppercase tracking-widest">Peso</span>
+                             </div>
+                             <p className="text-2xl font-black text-white">{latest.peso} <span className="text-sm text-zinc-500">kg</span></p>
+                        </Card>
+                        <Card className="p-5 bg-zinc-900 border-zinc-800">
+                             <div className="flex items-center gap-2 mb-2 text-zinc-500">
+                                 <Ruler size={14} />
+                                 <span className="text-[9px] font-black uppercase tracking-widest">Altura</span>
+                             </div>
+                             <p className="text-2xl font-black text-white">{latest.altura} <span className="text-sm text-zinc-500">cm</span></p>
+                        </Card>
+                         <Card className="p-5 bg-zinc-900 border-zinc-800">
+                             <div className="flex items-center gap-2 mb-2 text-zinc-500">
+                                 <Activity size={14} />
+                                 <span className="text-[9px] font-black uppercase tracking-widest">Gordura (BF)</span>
+                             </div>
+                             <p className="text-2xl font-black text-white">{results?.bf || latest.bio_percentual_gordura || '-'} <span className="text-sm text-zinc-500">%</span></p>
+                        </Card>
+                        <Card className="p-5 bg-zinc-900 border-zinc-800">
+                             <div className="flex items-center gap-2 mb-2 text-zinc-500">
+                                 <Dumbbell size={14} />
+                                 <span className="text-[9px] font-black uppercase tracking-widest">Massa Magra</span>
+                             </div>
+                             <p className="text-2xl font-black text-white">{results?.massaMagra || latest.bio_massa_magra || '-'} <span className="text-sm text-zinc-500">kg</span></p>
+                        </Card>
+                    </div>
+
+                    {latest.aiAnalysis && (
+                        <Card className="p-6 bg-zinc-900 border-indigo-500/30">
+                            <h3 className="text-[10px] font-black uppercase text-indigo-400 mb-4 flex items-center gap-2">
+                                <Brain size={14}/> Análise IA
+                            </h3>
+                            <p className="text-sm text-zinc-300 leading-relaxed font-medium">
+                                {latest.aiAnalysis}
+                            </p>
+                        </Card>
+                    )}
+                </div>
+            )}
+            <EliteFooter />
+        </div>
+    );
 }
 
-// --- RUNNING DASHBOARD (Merged CorreRJ and Periodization) ---
 export function RunningDashboard({ student, onBack }: { student: Student, onBack: () => void }) {
-  return (
-    <div className="h-screen overflow-y-auto bg-slate-950">
-        <RunTrackStudentView student={student} onBack={onBack} />
-    </div>
-  );
+    return (
+        <div className="h-screen overflow-y-auto bg-black pb-20 custom-scrollbar">
+             <div className="p-6">
+                <RunTrackStudentView student={student} onBack={onBack} />
+             </div>
+        </div>
+    );
 }
