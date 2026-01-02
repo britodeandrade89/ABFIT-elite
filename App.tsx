@@ -73,22 +73,28 @@ export default function App() {
   const [loginError, setLoginError] = useState('');
 
   useEffect(() => {
+    let mounted = true;
     const initAuth = async () => { 
-        // Check if we are using the mock API key from index.html
+        // Check if we are using the mock API key from index.html or if it's missing
         const config = window.__firebase_config;
-        if (config && config.apiKey === "mock-api-key") {
-            console.warn("ABFIT Elite: Running in DEMO mode with mock authentication.");
-            // Simulate an authenticated user
-            setUser({ uid: "demo-user", isAnonymous: true });
-            setLoading(false);
+        const isMock = !config || !config.apiKey || config.apiKey === "mock-api-key";
+
+        if (isMock) {
+            console.warn("ABFIT Elite: Running in DEMO mode (Mock/Missing Config).");
+            if (mounted) {
+              setUser({ uid: "demo-user", isAnonymous: true });
+              setLoading(false);
+            }
             return;
         }
 
         try { 
             await signInAnonymously(auth); 
-        } catch (err) { 
-            console.error("Auth error", err);
-            // Fallback for demo if auth fails
+        } catch (err: any) { 
+            if (!mounted) return;
+            // Handle auth/configuration-not-found or other auth errors gracefully
+            // This ensures the app continues to work even if Firebase isn't fully configured
+            console.warn("Firebase Auth Warning: Could not sign in anonymously. Switching to Fallback/Demo User.", err.code);
             setUser({ uid: "fallback-demo-user", isAnonymous: true });
             setLoading(false);
         } 
@@ -97,12 +103,15 @@ export default function App() {
     
     // Only listen to auth changes if not manually set to demo user
     const unsub = onAuthStateChanged(auth, (u) => { 
-        if (u) {
+        if (u && mounted) {
             setUser(u); 
             setLoading(false); 
         }
     });
-    return () => unsub();
+    return () => {
+      mounted = false;
+      unsub();
+    };
   }, []);
 
   useEffect(() => {
