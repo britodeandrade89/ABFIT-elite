@@ -318,49 +318,45 @@ export function WorkoutSessionView({ user, onBack }: SessionProps) {
                     </div>
                 </div>
 
-                {/* Tracking Section */}
-                <div className="p-3 md:p-5 space-y-4 md:space-y-5">
+                {/* Tracking Section - NEW HORIZONTAL LAYOUT */}
+                <div className="p-4 md:p-6 flex items-center gap-3 overflow-x-auto custom-scrollbar">
                     
-                    {/* Set Boxes */}
-                    <div>
-                        <p className="text-[8px] md:text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Séries Realizadas</p>
-                        <div className="flex gap-2 flex-wrap">
-                            {Array.from({ length: totalSets }).map((_, i) => {
-                                const isSetDone = completedSets[exerciseId]?.includes(i);
-                                return (
-                                    <button 
-                                        key={i}
-                                        onClick={() => handleSetToggle(exerciseId, i, ex.rest)}
-                                        className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center text-base md:text-lg font-black transition-all active:scale-95 border ${isSetDone ? 'bg-green-600 border-green-500 text-white shadow-lg' : 'bg-black border-white/10 text-zinc-600 hover:border-white/30'}`}
-                                    >
-                                        {i + 1}
-                                    </button>
-                                )
-                            })}
-                        </div>
+                    {/* Set Buttons Container */}
+                    <div className="flex gap-2 shrink-0">
+                        {Array.from({ length: totalSets }).map((_, i) => {
+                            const isSetDone = completedSets[exerciseId]?.includes(i);
+                            return (
+                                <button 
+                                    key={i}
+                                    onClick={() => handleSetToggle(exerciseId, i, ex.rest)}
+                                    className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black transition-all active:scale-95 border ${isSetDone ? 'bg-green-600 border-green-500 text-white shadow-lg' : 'bg-black border-white/10 text-zinc-600 hover:border-white/30'}`}
+                                >
+                                    {i + 1}
+                                </button>
+                            )
+                        })}
                     </div>
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-black/40 border border-white/5 rounded-xl p-2 text-center">
-                            <p className="text-[6px] md:text-[7px] font-black text-zinc-500 uppercase mb-1">Reps</p>
-                            <p className="text-white font-black text-xs md:text-sm">{ex.reps || '-'}</p>
+                    {/* Divider */}
+                    <div className="w-px h-10 bg-white/10 shrink-0 mx-1"></div>
+
+                    {/* Stats - Horizontal now */}
+                    <div className="flex gap-2 shrink-0">
+                        <div className="w-16 h-12 bg-black/40 border border-white/5 rounded-xl flex flex-col items-center justify-center">
+                            <p className="text-[6px] font-black text-zinc-500 uppercase">Reps</p>
+                            <p className="text-white font-black text-sm">{ex.reps || '-'}</p>
                         </div>
-                        <div className="bg-black/40 border border-white/5 rounded-xl p-0 overflow-hidden relative">
-                             <p className="absolute top-2 left-0 w-full text-[6px] md:text-[7px] font-black text-zinc-500 uppercase text-center pointer-events-none">Carga (kg)</p>
+                        <div className="w-20 h-12 bg-black/40 border border-white/5 rounded-xl relative overflow-hidden">
+                             <p className="absolute top-1.5 left-0 w-full text-[6px] font-black text-zinc-500 uppercase text-center pointer-events-none">Carga</p>
                              <input 
                                type="number"
                                inputMode="decimal"
-                               className="w-full h-full bg-transparent text-center text-red-500 font-black text-xs md:text-sm pt-4 outline-none focus:bg-white/5 transition-colors"
+                               className="w-full h-full bg-transparent text-center text-red-500 font-black text-sm pt-3 outline-none focus:bg-white/5 transition-colors"
                                placeholder="-"
                                value={loadMap[exerciseId] || ''}
                                onChange={(e) => setLoadMap({...loadMap, [exerciseId]: e.target.value})}
                                onClick={(e) => e.stopPropagation()}
                              />
-                        </div>
-                        <div className="bg-black/40 border border-white/5 rounded-xl p-2 text-center">
-                            <p className="text-[6px] md:text-[7px] font-black text-zinc-500 uppercase mb-1">Descanso</p>
-                            <p className="text-white font-black text-xs md:text-sm">{ex.rest ? `${ex.rest}s` : '0s'}</p>
                         </div>
                     </div>
 
