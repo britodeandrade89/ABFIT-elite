@@ -6,8 +6,6 @@ import {
 import { Logo, Card, BackgroundWrapper, EliteFooter, WeatherWidget } from './components/Layout';
 import { ProfessorDashboard, StudentManagement, WorkoutEditorView, CoachAssessmentView, PeriodizationView, RunningWorkoutManager } from './components/CoachFlow';
 import { WorkoutSessionView, WorkoutCounterView, StudentAssessmentView, RunningDashboard } from './components/StudentFlow';
-import { NutritionView } from './components/Nutrition';
-import { AnalyticsDashboard } from './components/Analytics';
 import { InstallPrompt } from './components/InstallPrompt';
 import { collection, query, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -72,6 +70,21 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
 
+  // Use o padrão de inicialização segura do Check-in GO
+  useEffect(() => {
+    const registerSW = async () => {
+        if ('serviceWorker' in navigator) {
+            try {
+                // Use relative path ./sw.js to respect current origin and base
+                const registration = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+            } catch (err) {
+                // Silently fail in preview environments
+            }
+        }
+    };
+    registerSW();
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const initAuth = async () => { 
@@ -92,8 +105,6 @@ export default function App() {
             await signInAnonymously(auth); 
         } catch (err: any) { 
             if (!mounted) return;
-            // Handle auth/configuration-not-found or other auth errors gracefully
-            // This ensures the app continues to work even if Firebase isn't fully configured
             console.warn("Firebase Auth Warning: Could not sign in anonymously. Switching to Fallback/Demo User.", err.code);
             setUser({ uid: "fallback-demo-user", isAnonymous: true });
             setLoading(false);
@@ -267,24 +278,6 @@ export default function App() {
                     <CheckCircle2 className="text-blue-600 group-hover:text-white" />
                 </div>
             </button>
-            <button onClick={() => setView('NUTRITION')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-emerald-500/30">
-                <div>
-                    <span className="font-black italic uppercase text-lg group-hover:text-emerald-500 transition-colors text-white text-left">Nutrição Elite</span>
-                    <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest mt-1 text-left text-white">Planos AI & Diário</p>
-                </div>
-                <div className="w-12 h-12 bg-emerald-600/10 rounded-2xl flex items-center justify-center border border-emerald-500/20 group-hover:bg-emerald-600 transition-colors shadow-inner text-white">
-                    <CheckCircle2 className="text-emerald-600 group-hover:text-white" />
-                </div>
-            </button>
-            <button onClick={() => setView('ANALYTICS')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-purple-500/30">
-                <div>
-                    <span className="font-black italic uppercase text-lg group-hover:text-purple-500 transition-colors text-white text-left">Performance Analytics</span>
-                    <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest mt-1 text-left text-white">Evolução & Gráficos</p>
-                </div>
-                <div className="w-12 h-12 bg-purple-600/10 rounded-2xl flex items-center justify-center border border-purple-500/20 group-hover:bg-purple-600 transition-colors shadow-inner text-white">
-                    <Trophy className="text-purple-600 group-hover:text-white" />
-                </div>
-            </button>
 
             <button onClick={() => setView('STUDENT_ASSESSMENT')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-rose-500/30">
                 <div>
@@ -313,8 +306,6 @@ export default function App() {
       {view === 'WORKOUTS' && selectedStudent && <WorkoutSessionView user={selectedStudent} onBack={() => setView('DASHBOARD')} />}
       {view === 'WORKOUT_COUNTER' && selectedStudent && <WorkoutCounterView student={selectedStudent} onBack={() => setView('DASHBOARD')} onSaveHistory={(h) => handleSaveData(selectedStudent.id, { workoutHistory: h })} />}
       {view === 'STUDENT_ASSESSMENT' && selectedStudent && <StudentAssessmentView student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
-      {view === 'NUTRITION' && selectedStudent && <NutritionView student={selectedStudent} onBack={() => setView('DASHBOARD')} onSave={handleSaveData} />}
-      {view === 'ANALYTICS' && selectedStudent && <AnalyticsDashboard student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
       {view === 'CORRE_RJ' && selectedStudent && <RunningDashboard student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
       
       {view === 'PROFESSOR_DASH' && <ProfessorDashboard students={allStudentsForCoach} onLogout={() => setView('LOGIN')} onSelect={(s) => { setSelectedStudent(s); setView('STUDENT_MGMT'); }} />}
