@@ -46,20 +46,35 @@ export async function callGemini(prompt: string, systemInstruction: string = "",
 export async function generateExerciseImage(exerciseName: string): Promise<string | null> {
   if (!apiKey) return null;
   
-  // Refinamento Biomecânico Estrito e Correções de Posição (From PrescreveAI)
+  // Refinamento Biomecânico Estrito e Correções de Posição (From PrescreveAI Updated)
   let biomechanicalRefinement = "Ensuring perfect biomechanics.";
   const nameLower = exerciseName.toLowerCase();
 
+  // Angle Specifics
+  if (nameLower.includes("banco 75")) biomechanicalRefinement += " The bench is at a high incline of 75 degrees (almost vertical).";
+  if (nameLower.includes("banco 45")) biomechanicalRefinement += " The bench is at a standard incline of 45 degrees.";
+  if (nameLower.includes("banco declinado")) biomechanicalRefinement += " The bench is declined, head lower than hips.";
+
+  // Movement Specifics
+  if (nameLower.includes("alternado")) biomechanicalRefinement += " The athlete is performing the movement alternating arms (one up, one down).";
+  if (nameLower.includes("unilateral")) biomechanicalRefinement += " The athlete is performing the movement with only one side/arm/leg active.";
+  if (nameLower.includes("pegada neutra")) biomechanicalRefinement += " Hands palms facing each other (neutral grip).";
+  if (nameLower.includes("pegada supinada")) biomechanicalRefinement += " Palms facing up/forward (supinated grip).";
+  if (nameLower.includes("pegada pronada")) biomechanicalRefinement += " Palms facing down/back (pronated grip).";
+
+  // Critical Rules
   if (nameLower.includes("supino reto") || (nameLower.includes("supino") && nameLower.includes("reto"))) {
-    biomechanicalRefinement = "CRITICAL BIOMECHANICS: Flat Bench Press. The athlete must be LYING COMPLETELY HORIZONTAL and FLAT on a bench. The weights are being pressed directly above the chest. The athlete MUST NOT be sitting or inclined.";
+    biomechanicalRefinement += " CRITICAL BIOMECHANICS: Flat Bench Press. The athlete must be LYING COMPLETELY HORIZONTAL and FLAT on a bench. The weights are being pressed directly above the chest. The athlete MUST NOT be sitting or inclined.";
   } else if (nameLower.includes("supino inclinado")) {
-    biomechanicalRefinement = "CRITICAL BIOMECHANICS: Incline Bench Press. The bench is at a 45-degree angle. The athlete is leaning back on the incline. The dumbbells or barbell are pressed from the upper chest towards the ceiling.";
-  } else if (nameLower.includes("crossover") || nameLower.includes("cross-over")) {
-    biomechanicalRefinement = "CRITICAL BIOMECHANICS: High-to-Low Cable Crossover. The athlete is standing. The arms move in an arc from a high position to a low-forward position. The hands MUST meet or cross exactly at the level of the NIPPLES (chest level) for maximum pec contraction.";
-  } else if (nameLower.includes("frontal")) {
-    biomechanicalRefinement = "CRITICAL BIOMECHANICS: Front Squat. The barbell rests on the front shoulders (front rack position), elbows held high and pointing forward. Barbell MUST NOT be on the back.";
+    biomechanicalRefinement += " CRITICAL BIOMECHANICS: Incline Bench Press. The bench is at a 45-degree angle. The athlete is leaning back on the incline. The dumbbells or barbell are pressed from the upper chest towards the ceiling.";
+  } else if (nameLower.includes("crossover") && nameLower.includes("alta")) {
+    biomechanicalRefinement += " CRITICAL BIOMECHANICS: High-to-Low Cable Crossover. The athlete is standing. The arms move in an arc from a high position to a low-forward position. The hands MUST meet or cross exactly at the level of the NIPPLES (chest level) for maximum pec contraction.";
+  } else if (nameLower.includes("frontal") || nameLower.includes("sobre ombros")) {
+    biomechanicalRefinement += " CRITICAL BIOMECHANICS: Front Squat / Front Rack. The barbell rests on the front shoulders (front rack position), elbows held high and pointing forward. Barbell MUST NOT be on the back.";
   } else if (nameLower.includes("agachamento livre") || nameLower.includes("back squat")) {
-    biomechanicalRefinement = "Traditional Back Squat. Barbell is resting on the upper back/trapezius.";
+    biomechanicalRefinement += " Traditional Back Squat. Barbell is resting on the upper back/trapezius.";
+  } else if (nameLower.includes("vela")) {
+    biomechanicalRefinement += " Gymnast style: Athlete is on the floor, raising legs and hips towards the ceiling until vertical (Candlestick position).";
   }
 
   const prompt = `Cinema-grade 8k raw photograph of a muscular Black athlete perfectly executing the exercise "${exerciseName}" in a high-end futuristic gym. ${biomechanicalRefinement} Peak muscle contraction, glistening sweat, volumetric lighting, high contrast, wide shot, professional fitness photography.`;
