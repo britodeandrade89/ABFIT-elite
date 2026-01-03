@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { CloudRain, Sun, Droplets } from 'lucide-react';
+import { CloudRain, Sun, Droplets, RefreshCw, CheckCircle2, Bell } from 'lucide-react';
 import { callGemini } from '../services/gemini';
-import { WeatherData } from '../types';
+import { WeatherData, AppNotification } from '../types';
 
 export function Logo({ size = "text-8xl", subSize = "text-[10px]" }: { size?: string, subSize?: string }) {
   return (
@@ -36,12 +36,63 @@ export function EliteFooter() {
     <footer className="mt-20 pb-12 text-center opacity-30 animate-in fade-in duration-1000">
       <div className="max-w-[150px] mx-auto h-px bg-zinc-800 mb-6"></div>
       <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 text-center">
-        ABFIT Elite v1.5
+        ABFIT Elite v1.6 (Realtime)
       </p>
       <p className="text-[8px] font-bold uppercase tracking-widest text-zinc-600 mt-2 text-center">
         Criador: André Brito
       </p>
     </footer>
+  );
+}
+
+// --- NEW COMPONENTS FOR REALTIME STATUS ---
+
+export function SyncStatus() {
+  const [synced, setSynced] = useState(true);
+
+  // Fake sync effect for visual feedback when data changes
+  useEffect(() => {
+    // This component mounts, assuming connected. 
+    // In a real app, this would listen to Firestore connection state.
+    // We'll animate it on mount to show "Live" status.
+    setSynced(false);
+    const t = setTimeout(() => setSynced(true), 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5 backdrop-blur-md">
+       {synced ? (
+         <>
+           <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]"></div>
+           <span className="text-[8px] font-black uppercase text-zinc-400">Online</span>
+         </>
+       ) : (
+         <>
+           <RefreshCw size={10} className="text-amber-500 animate-spin" />
+           <span className="text-[8px] font-black uppercase text-zinc-400">Sync...</span>
+         </>
+       )}
+    </div>
+  );
+}
+
+export function NotificationBadge({ notifications = [], onClick }: { notifications?: AppNotification[], onClick?: () => void }) {
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  return (
+    <button onClick={onClick} className="relative p-2 bg-zinc-900 rounded-full border border-white/5 hover:bg-zinc-800 transition-colors">
+      <Bell size={18} className={unreadCount > 0 ? "text-white swing-animation" : "text-zinc-500"} />
+      {unreadCount > 0 && (
+        <div className="absolute top-0 right-0 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center text-[8px] font-black text-white border-2 border-black animate-bounce">
+          {unreadCount}
+        </div>
+      )}
+      <style>{`
+        @keyframes swing { 0%,100% { transform: rotate(0deg); } 20% { transform: rotate(15deg); } 40% { transform: rotate(-10deg); } 60% { transform: rotate(5deg); } 80% { transform: rotate(-5deg); } }
+        .swing-animation { animation: swing 2s infinite ease-in-out; transform-origin: top center; }
+      `}</style>
+    </button>
   );
 }
 

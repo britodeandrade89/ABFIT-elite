@@ -4,10 +4,10 @@ import {
   Trash2, Video, Play, Loader2, Brain, Activity, RotateCcw,
   Target, TrendingUp, Flame, BookOpen, Clock, ListFilter,
   Save, Layout, Zap, Footprints, Sparkles, Repeat, AlertCircle, Dumbbell,
-  RefreshCcw, Image as ImageIcon, Scale, MousePointer2, FilePlus, Check
+  RefreshCcw, Image as ImageIcon, Scale, MousePointer2, FilePlus, Check, Calendar
 } from 'lucide-react';
 import { Card, EliteFooter, Logo } from './Layout';
-import { Student, Exercise, PhysicalAssessment, PeriodizationPlan, Workout } from '../types';
+import { Student, Exercise, PhysicalAssessment, PeriodizationPlan, Workout, AppNotification } from '../types';
 import { callGemini, generateExerciseImage, generatePeriodizationPlan } from '../services/gemini';
 import { doc, setDoc } from 'firebase/firestore';
 import { db, appId } from '../services/firebase';
@@ -284,7 +284,19 @@ export function CoachAssessmentView({ student, onBack, onSave }: { student: Stud
     const currentAssessments = student.physicalAssessments || [];
     const updatedAssessments = [assessment, ...currentAssessments];
     
-    onSave(student.id, { physicalAssessments: updatedAssessments });
+    // Add Notification for student
+    const newNotification: AppNotification = {
+      id: Date.now().toString(),
+      type: 'ASSESSMENT',
+      message: `Nova Avaliação Física disponível. Data: ${new Date().toLocaleDateString('pt-BR')}`,
+      timestamp: Date.now(),
+      read: false
+    };
+    
+    onSave(student.id, { 
+      physicalAssessments: updatedAssessments, 
+      notifications: [newNotification, ...(student.notifications || [])] 
+    });
     onBack();
   };
 
@@ -622,6 +634,11 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
   const [currentWorkoutId, setCurrentWorkoutId] = useState<string | null>(student.workouts?.[0]?.id || null);
   const [workoutTitle, setWorkoutTitle] = useState(student.workouts?.[0]?.title || "Treino A");
   
+  // Schedule State
+  const [startDate, setStartDate] = useState(student.workouts?.[0]?.startDate || new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(student.workouts?.[0]?.endDate || "");
+  const [frequency, setFrequency] = useState<number>(student.workouts?.[0]?.frequencyWeekly || 3);
+
   const [selectedMuscle, setSelectedMuscle] = useState("");
   const [exerciseOptions, setExerciseOptions] = useState<Exercise[]>([]); 
   const [loadingOptions, setLoadingOptions] = useState(false);
@@ -651,6 +668,23 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
       setExerciseOptions([]);
     }
   }, [selectedMuscle]);
+
+  // Calculate Projected Sessions when dates change
+  const projectedSessions = useMemo(() => {
+    if (!startDate || !endDate) return 10; // Default
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    const weeks = diffDays / 7;
+    
+    // Rough logic based on frequency. If frequency is weekly:
+    // This implies this specific Workout (e.g. A) is done 'frequency' times? 
+    // Usually Frequency is Total. Let's assume Frequency is for THIS workout for now for simplicity, 
+    // or calculate based on total split.
+    // If user inputs "3x week" for "Treino A", it means 3*weeks.
+    return Math.round(weeks * frequency);
+  }, [startDate, endDate, frequency]);
 
   const generateImg = async (exName: string) => {
     setImageLoading(true); 
@@ -687,7 +721,11 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
     const newWorkout: Workout = {
         id: currentWorkoutId || Date.now().toString(),
         title: workoutTitle,
-        exercises: currentWorkoutExercises
+        exercises: currentWorkoutExercises,
+        startDate,
+        endDate,
+        frequencyWeekly: frequency,
+        projectedSessions
     };
 
     let updatedWorkouts = [...allWorkouts];
@@ -703,15 +741,29 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
     setCurrentWorkoutId(newWorkout.id); // Stay on this workout
 
     // Save to Firebase
-    onSave(student.id, { workouts: updatedWorkouts });
+    // Add Notification
+    const notif: AppNotification = {
+      id: Date.now().toString(),
+      type: 'WORKOUT',
+      message: `Novo Treino "${workoutTitle}" prescrito! Válido até ${new Date(endDate).toLocaleDateString('pt-BR')}`,
+      timestamp: Date.now(),
+      read: false
+    };
+
+    onSave(student.id, { 
+      workouts: updatedWorkouts,
+      notifications: [notif, ...(student.notifications || [])]
+    });
     
-    alert("Treino salvo com sucesso! Pode continuar editando ou criar outro.");
+    alert("Treino salvo e notificação enviada ao aluno!");
   };
 
   const handleNewWorkout = () => {
     setWorkoutTitle("Novo Treino");
     setCurrentWorkoutExercises([]);
     setCurrentWorkoutId(null);
+    setStartDate(new Date().toISOString().split('T')[0]);
+    setEndDate("");
   };
 
   return (
@@ -735,16 +787,40 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
       {/* Workout Naming Section */}
       <div className="mb-8">
          <Card className="p-6 bg-zinc-900 border-red-600/30">
-            <label className="text-[10px] font-black uppercase text-red-500 mb-2 block tracking-widest">Identificação do Treino</label>
-            <div className="flex items-center gap-3">
-               <Layout className="text-zinc-500"/>
-               <input 
-                 type="text" 
-                 value={workoutTitle} 
-                 onChange={(e) => setWorkoutTitle(e.target.value)} 
-                 className="bg-transparent border-b-2 border-zinc-700 w-full text-2xl font-black uppercase italic text-white focus:border-red-600 outline-none placeholder:text-zinc-700"
-                 placeholder="EX: TREINO A - PEITO E TRÍCEPS"
-               />
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="text-[10px] font-black uppercase text-red-500 mb-2 block tracking-widest">Identificação do Treino</label>
+                <div className="flex items-center gap-3">
+                   <Layout className="text-zinc-500"/>
+                   <input 
+                     type="text" 
+                     value={workoutTitle} 
+                     onChange={(e) => setWorkoutTitle(e.target.value)} 
+                     className="bg-transparent border-b-2 border-zinc-700 w-full text-2xl font-black uppercase italic text-white focus:border-red-600 outline-none placeholder:text-zinc-700"
+                     placeholder="EX: TREINO A - PEITO E TRÍCEPS"
+                   />
+                </div>
+              </div>
+
+              {/* SCHEDULE INPUTS */}
+              <div className="grid grid-cols-3 gap-4 border-t border-white/5 pt-4">
+                 <div>
+                    <label className="text-[9px] font-bold uppercase text-zinc-500 mb-1 block">Início</label>
+                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-black border border-white/10 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-red-600" />
+                 </div>
+                 <div>
+                    <label className="text-[9px] font-bold uppercase text-zinc-500 mb-1 block">Renovação (Fim)</label>
+                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-black border border-white/10 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-red-600" />
+                 </div>
+                 <div>
+                    <label className="text-[9px] font-bold uppercase text-zinc-500 mb-1 block">Freq. Semanal (Deste Treino)</label>
+                    <input type="number" value={frequency} onChange={e => setFrequency(Number(e.target.value))} className="w-full bg-black border border-white/10 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-red-600" placeholder="Ex: 2" />
+                 </div>
+              </div>
+              <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase text-zinc-500">Total Projetado:</span>
+                  <span className="text-red-500 font-black">{projectedSessions} Sessões</span>
+              </div>
             </div>
          </Card>
       </div>
@@ -815,7 +891,7 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
                 
                 {/* SAVE BUTTON FOR THE LIST */}
                 <button onClick={handleSaveWorkout} className="w-full mt-4 py-4 bg-blue-600 rounded-2xl font-black uppercase tracking-widest text-white shadow-lg shadow-blue-900/20 active:scale-95 transition-all hover:bg-blue-700 flex items-center justify-center gap-2">
-                    <Save size={16}/> Salvar Este Treino
+                    <Save size={16}/> Salvar Prescrição & Notificar
                 </button>
              </div>
           )}

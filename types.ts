@@ -15,6 +15,11 @@ export interface Workout {
   id: string;
   title: string;
   exercises: Exercise[];
+  // Scheduling Fields
+  startDate?: string;
+  endDate?: string;
+  frequencyWeekly?: number;
+  projectedSessions?: number; // Total calculated sessions (e.g., 10)
 }
 
 export interface PeriodizationMicrocycle {
@@ -64,10 +69,19 @@ export interface PhysicalAssessment {
 
 export interface WorkoutHistoryEntry {
   id: string;
+  workoutId?: string; // Link to specific workout plan
   name: string;
   duration: string;
   date: string;
   timestamp: number;
+}
+
+export interface AppNotification {
+  id: string;
+  type: 'WORKOUT' | 'ASSESSMENT' | 'DIET' | 'GENERAL';
+  message: string;
+  timestamp: number;
+  read: boolean;
 }
 
 // Analytics Types
@@ -129,11 +143,14 @@ export interface Student {
   physicalAssessments?: PhysicalAssessment[];
   weightHistory?: any[];
   // New Fields
+  notifications?: AppNotification[];
   analytics?: AnalyticsData;
   nutrition?: NutritionProfile;
   runningWorkouts?: any[];
   periodization?: PeriodizationPlan; // Strength Periodization
   runningPeriodization?: PeriodizationPlan; // Running Periodization
+  
+  lastUpdateTimestamp?: number;
 
   // RunTrack / Anamnese Fields
   age?: string | number;

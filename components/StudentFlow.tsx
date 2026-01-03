@@ -3,10 +3,11 @@ import {
   ArrowLeft, Dumbbell, CheckCircle2, HeartPulse, Trophy, 
   ChevronLeft, ChevronRight, Plus, X, SkipForward, Play,
   TrendingUp, Flame, Activity, Zap, Footprints, Loader2, Maximize2,
-  Timer, RotateCw, Power, FastForward, Calendar, History, Scale, Ruler, Brain
+  Timer, RotateCw, Power, FastForward, Calendar, History, Scale, Ruler, Brain,
+  Bell, List
 } from 'lucide-react';
-import { Card, EliteFooter } from './Layout';
-import { Student, PhysicalAssessment, WorkoutHistoryEntry, AnalyticsData, PeriodizationPlan } from '../types';
+import { Card, EliteFooter, SyncStatus, NotificationBadge } from './Layout';
+import { Student, PhysicalAssessment, WorkoutHistoryEntry, AnalyticsData, PeriodizationPlan, Workout } from '../types';
 import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { db, appId } from '../services/firebase';
 import { RunTrackStudentView } from './RunTrack';
@@ -81,8 +82,32 @@ interface SessionProps {
 }
 
 export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
-  const treino = user?.workouts?.[0];
-  
+  // Allow user to select workout if multiple exist
+  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(user.workouts?.[0] || null);
+  const [showHistoryDropdown, setShowHistoryDropdown] = useState(false);
+
+  // Determine current count
+  const workoutCountInfo = useMemo(() => {
+    if (!selectedWorkout) return { current: 0, total: 0 };
+    
+    // Count how many times THIS workout was done within its active window
+    const history = user.workoutHistory || [];
+    const startDate = selectedWorkout.startDate ? new Date(selectedWorkout.startDate) : new Date(0);
+    const endDate = selectedWorkout.endDate ? new Date(selectedWorkout.endDate) : new Date(2100, 0, 1);
+    
+    const count = history.filter(h => {
+       // Filter by name (simple) or ID if we stored it
+       const isSame = h.name === selectedWorkout.title || h.workoutId === selectedWorkout.id;
+       const d = new Date(h.date);
+       return isSame && d >= startDate && d <= endDate;
+    }).length;
+
+    return {
+        current: count + 1, // Current session being performed
+        total: selectedWorkout.projectedSessions || 10
+    };
+  }, [user.workoutHistory, selectedWorkout]);
+
   // New State for Set Tracking: { [exerciseId]: [completedSetIndices] }
   const [completedSets, setCompletedSets] = useState<Record<string, number[]>>({});
   const [loadMap, setLoadMap] = useState<Record<string, string>>({});
@@ -171,9 +196,9 @@ export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
   };
 
   const isWorkoutComplete = useMemo(() => {
-    if (!treino?.exercises) return false;
-    return treino.exercises.every((ex, idx) => isExerciseComplete(ex, idx));
-  }, [treino, completedSets]);
+    if (!selectedWorkout?.exercises) return false;
+    return selectedWorkout.exercises.every((ex, idx) => isExerciseComplete(ex, idx));
+  }, [selectedWorkout, completedSets]);
 
   const handleExpandExercise = async (ex: any) => {
     setExpandedExercise(ex);
@@ -189,10 +214,12 @@ export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
   };
 
   const handleFinishWorkout = async () => {
+    if (!selectedWorkout) return;
     setIsFinishing(true);
     const entry: WorkoutHistoryEntry = {
         id: Date.now().toString(),
-        name: treino?.title || "Treino Realizado",
+        workoutId: selectedWorkout.id,
+        name: selectedWorkout.title || "Treino Realizado",
         duration: Math.floor(elapsedSeconds / 60).toString(),
         date: new Date().toISOString().split('T')[0],
         timestamp: Date.now()
@@ -240,18 +267,47 @@ export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
           </div>
       )}
 
-      <header className="flex items-center justify-between mb-10 text-left sticky top-0 bg-black/80 backdrop-blur-md z-40 py-4 -mx-6 px-6 border-b border-white/5">
+      <header className="flex items-center justify-between mb-4 text-left sticky top-0 bg-black/80 backdrop-blur-md z-40 py-4 -mx-6 px-6 border-b border-white/5">
         <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white text-left hover:bg-red-600 transition-colors"><ArrowLeft size={20} className="text-zinc-400 group-hover:text-white"/></button>
-            <h2 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-left truncate max-w-[200px] md:max-w-none">
-              {treino?.title || "Meus Treinos"}
-            </h2>
+            <div className="relative">
+                <h2 onClick={() => setShowHistoryDropdown(!showHistoryDropdown)} className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-left truncate max-w-[200px] md:max-w-none flex items-center gap-2 cursor-pointer">
+                  {selectedWorkout?.title || "Meus Treinos"} <List size={14}/>
+                </h2>
+                {showHistoryDropdown && user.workouts && (
+                    <div className="absolute top-full left-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl z-50 w-64 overflow-hidden">
+                        <p className="text-[9px] uppercase font-bold text-zinc-500 p-3 bg-black/50">Selecione o Treino</p>
+                        {user.workouts.map(w => (
+                            <button key={w.id} onClick={() => { setSelectedWorkout(w); setShowHistoryDropdown(false); }} className="w-full text-left p-4 hover:bg-red-900/20 border-b border-white/5 last:border-0 font-bold text-xs uppercase">
+                                {w.title}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
-        <div className="flex items-center gap-2 bg-zinc-900 px-4 py-2 rounded-xl border border-red-900/30">
-            <Timer className="text-red-500 animate-pulse" size={16} />
-            <span className="font-mono text-xl font-black text-white">{formatTime(elapsedSeconds)}</span>
+        <div className="flex items-center gap-2">
+           <SyncStatus />
         </div>
       </header>
+      
+      {/* HEADER COUNTER & TIMER */}
+      <div className="flex justify-between items-center mb-8">
+         <div className="flex items-center gap-2">
+             <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800">
+                Treino {workoutCountInfo.current} / {workoutCountInfo.total}
+             </div>
+             {selectedWorkout?.endDate && (
+                 <div className="text-[8px] font-bold uppercase text-zinc-600">
+                    Vence: {new Date(selectedWorkout.endDate).toLocaleDateString('pt-BR')}
+                 </div>
+             )}
+         </div>
+         <div className="flex items-center gap-2 bg-zinc-900 px-4 py-2 rounded-xl border border-red-900/30">
+            <Timer className="text-red-500 animate-pulse" size={16} />
+            <span className="font-mono text-xl font-black text-white">{formatTime(elapsedSeconds)}</span>
+         </div>
+      </div>
 
       {/* AUTOMATIC PERIODIZATION HEADER */}
       {activeMicrocycle && (
@@ -276,9 +332,9 @@ export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
         </Card>
       )}
 
-      {treino ? (
+      {selectedWorkout ? (
         <div className="space-y-6 text-left">
-          {treino.exercises.map((ex, idx) => {
+          {selectedWorkout.exercises.map((ex, idx) => {
             const exerciseId = ex.id || idx.toString();
             const totalSets = getSetCount(ex);
             const isComplete = isExerciseComplete(ex, idx);
@@ -467,38 +523,93 @@ export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
 
 export function WorkoutCounterView({ student, onBack, onSaveHistory }: { student: Student, onBack: () => void, onSaveHistory: (h: WorkoutHistoryEntry[]) => void }) {
     const history = student.workoutHistory || [];
-    
-    // Sort by date desc
+    const workouts = student.workouts || [];
+    const [currentDate, setCurrentDate] = useState(new Date());
+
+    // Sort by date desc for history list
     const sortedHistory = [...history].sort((a, b) => b.timestamp - a.timestamp);
+
+    // Calendar Generation
+    const daysInMonth = useMemo(() => {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        return new Date(year, month + 1, 0).getDate();
+    }, [currentDate]);
+
+    const firstDayOffset = useMemo(() => {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        return new Date(year, month, 1).getDay(); // 0 = Sunday
+    }, [currentDate]);
+
+    const monthName = currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    const today = new Date().toISOString().split('T')[0];
+
+    // Helper to identify workout type color
+    const getWorkoutColor = (name: string) => {
+        const lower = name.toLowerCase();
+        if (lower.includes('treino a') || lower.includes('peito')) return 'bg-red-600';
+        if (lower.includes('treino b') || lower.includes('costas')) return 'bg-blue-600';
+        if (lower.includes('treino c') || lower.includes('perna')) return 'bg-green-600';
+        return 'bg-zinc-600';
+    };
 
     return (
         <div className="p-6 pb-48 text-white overflow-y-auto h-screen text-left custom-scrollbar relative">
-            <header className="flex items-center gap-4 mb-10 text-left sticky top-0 bg-black/80 backdrop-blur-md z-40 py-4 -mx-6 px-6 border-b border-white/5">
-                <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white text-left hover:bg-red-600 transition-colors">
-                    <ArrowLeft size={20} className="text-zinc-400 group-hover:text-white"/>
-                </button>
-                <h2 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-left">
-                    Histórico de Treinos
-                </h2>
+            <header className="flex items-center justify-between mb-8 text-left sticky top-0 bg-black/80 backdrop-blur-md z-40 py-4 -mx-6 px-6 border-b border-white/5">
+                <div className="flex items-center gap-4">
+                    <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white text-left hover:bg-red-600 transition-colors">
+                        <ArrowLeft size={20} className="text-zinc-400 group-hover:text-white"/>
+                    </button>
+                    <h2 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-left">
+                        Histórico & Calendário
+                    </h2>
+                </div>
+                <SyncStatus />
             </header>
 
-            <div className="grid grid-cols-2 gap-4 mb-8">
-                <Card className="p-5 bg-gradient-to-br from-zinc-900 to-black text-center">
-                    <h3 className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-2">Total</h3>
-                    <p className="text-3xl font-black text-white">{history.length}</p>
-                </Card>
-                 <Card className="p-5 bg-gradient-to-br from-zinc-900 to-black text-center border-red-900/30">
-                    <h3 className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-2">Streak</h3>
-                    <div className="flex items-center justify-center gap-2">
-                       <p className="text-3xl font-black text-red-600">{student.analytics?.streakDays || 0}</p>
-                       <TrendingUp size={16} className="text-red-600"/>
-                    </div>
-                 </Card>
-            </div>
+            {/* CALENDAR VIEW */}
+            <Card className="p-6 mb-8 bg-zinc-900">
+                <div className="flex justify-between items-center mb-6">
+                   <h3 className="font-black uppercase text-xl text-white italic">{monthName}</h3>
+                   <div className="flex gap-2">
+                       {/* Simple navigation could go here */}
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-7 gap-2 mb-2">
+                    {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-center text-[10px] font-bold text-zinc-600 uppercase">{d}</div>)}
+                </div>
+                <div className="grid grid-cols-7 gap-2">
+                    {/* Empty slots */}
+                    {Array.from({length: firstDayOffset}).map((_, i) => <div key={`empty-${i}`} className="aspect-square"></div>)}
+                    
+                    {/* Days */}
+                    {Array.from({length: daysInMonth}).map((_, i) => {
+                        const day = i + 1;
+                        const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                        const isToday = dateStr === today;
+                        const dayWorkouts = history.filter(h => h.date === dateStr);
+                        
+                        return (
+                           <div key={day} className={`aspect-square rounded-xl border flex flex-col items-center justify-center relative ${isToday ? 'border-red-600 bg-red-600/10' : 'border-zinc-800 bg-black'}`}>
+                               <span className={`text-xs font-bold ${isToday ? 'text-red-500' : 'text-zinc-400'}`}>{day}</span>
+                               
+                               {/* Dots for workouts */}
+                               <div className="flex gap-1 mt-1">
+                                   {dayWorkouts.map((w, idx) => (
+                                       <div key={idx} className={`w-1.5 h-1.5 rounded-full ${getWorkoutColor(w.name)}`} title={w.name}></div>
+                                   ))}
+                               </div>
+                           </div>
+                        );
+                    })}
+                </div>
+            </Card>
 
             <div className="space-y-4">
                 <h3 className="text-[12px] font-black uppercase text-zinc-400 tracking-widest pl-2 flex items-center gap-2">
-                    <History size={14}/> Últimas Sessões
+                    <History size={14}/> Histórico Detalhado
                 </h3>
                 {sortedHistory.length === 0 ? (
                     <p className="text-center text-zinc-500 text-xs py-10 italic">Nenhum treino registrado ainda.</p>
@@ -506,7 +617,10 @@ export function WorkoutCounterView({ student, onBack, onSaveHistory }: { student
                     sortedHistory.map((h) => (
                         <div key={h.id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex justify-between items-center">
                             <div>
-                                <p className="font-black text-sm text-white uppercase italic">{h.name}</p>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className={`w-2 h-2 rounded-full ${getWorkoutColor(h.name)}`}></div>
+                                    <p className="font-black text-sm text-white uppercase italic">{h.name}</p>
+                                </div>
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className="text-[10px] font-bold text-zinc-500 bg-black px-2 py-0.5 rounded flex items-center gap-1">
                                         <Calendar size={10}/> {new Date(h.date).toLocaleDateString('pt-BR')}
@@ -536,13 +650,16 @@ export function StudentAssessmentView({ student, onBack }: { student: Student, o
 
     return (
         <div className="p-6 pb-48 text-white overflow-y-auto h-screen text-left custom-scrollbar relative">
-             <header className="flex items-center gap-4 mb-10 text-left sticky top-0 bg-black/80 backdrop-blur-md z-40 py-4 -mx-6 px-6 border-b border-white/5">
-                <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white text-left hover:bg-red-600 transition-colors">
-                    <ArrowLeft size={20} className="text-zinc-400 group-hover:text-white"/>
-                </button>
-                <h2 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-left">
-                    Avaliação Física
-                </h2>
+             <header className="flex items-center justify-between mb-10 text-left sticky top-0 bg-black/80 backdrop-blur-md z-40 py-4 -mx-6 px-6 border-b border-white/5">
+                <div className="flex items-center gap-4">
+                    <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white text-left hover:bg-red-600 transition-colors">
+                        <ArrowLeft size={20} className="text-zinc-400 group-hover:text-white"/>
+                    </button>
+                    <h2 className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-left">
+                        Avaliação Física
+                    </h2>
+                </div>
+                <SyncStatus />
             </header>
 
             {!latest ? (
