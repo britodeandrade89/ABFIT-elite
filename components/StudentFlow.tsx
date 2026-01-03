@@ -4,12 +4,14 @@ import {
   ChevronLeft, ChevronRight, Plus, X, SkipForward, Play,
   TrendingUp, Flame, Activity, Zap, Footprints, Loader2, Maximize2,
   Timer, RotateCw, Power, FastForward, Calendar, History, Scale, Ruler, Brain,
-  Bell, List
+  Bell, List, MapPin, Clock, DollarSign, AlertCircle, RefreshCcw, CalendarDays, ExternalLink,
+  Navigation, CheckCircle, Star, Sparkles, Info
 } from 'lucide-react';
 import { Card, EliteFooter, SyncStatus, NotificationBadge } from './Layout';
 import { Student, PhysicalAssessment, WorkoutHistoryEntry, AnalyticsData, PeriodizationPlan, Workout } from '../types';
-import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
-import { db, appId } from '../services/firebase';
+import { collection, onSnapshot, doc, setDoc, query, where, getFirestore } from 'firebase/firestore';
+import { onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { db, appId, auth } from '../services/firebase';
 import { RunTrackStudentView } from './RunTrack';
 import { generateExerciseImage } from '../services/gemini';
 
@@ -731,3 +733,434 @@ export function RunningDashboard({ student, onBack }: { student: Student, onBack
         </div>
     );
 }
+
+// --- CORRE RJ 2026 CONSOLIDATED VIEW ---
+
+const BG_IMAGES = [
+  "Gemini_Generated_Image_7nouah7nouah7nou.jpg",
+  "Gemini_Generated_Image_r3h35ur3h35ur3h3.jpg",
+  "Gemini_Generated_Image_j17jomj17jomj17j.jpg",
+  "Gemini_Generated_Image_jg3cqzjg3cqzjg3c.jpg",
+  "Gemini_Generated_Image_un11qhun11qhun11.jpg",
+  "Gemini_Generated_Image_58x42n58x42n58x4 (1).jpg",
+  "Gemini_Generated_Image_jrjn49jrjn49jrjn.jpg",
+  "Gemini_Generated_Image_qui4mnqui4mnqui4.jpg",
+  "Gemini_Generated_Image_b1vy1ab1vy1ab1vy.jpg",
+  "Gemini_Generated_Image_58x42n58x42n58x4.jpg"
+];
+
+const INITIAL_PREDICTIONS = [
+  { nome: "Run Experience Pão de Açúcar", data: "04/01", dataIso: "2026-01-04", cidade: "RJ", horario: "06:30", largada: "Praia Vermelha, Urca", link: "https://www.riorunningtour.com.br", valor: "R$ 189,00", info: "Trilha Morro da Urca + 5km Asfalto." },
+  { nome: "2ª Maricá Night Run", data: "10/01", dataIso: "2026-01-10", cidade: "RJ", horario: "19:00", largada: "Itaipuaçu, Maricá", link: "https://www.ticketsports.com.br", valor: "R$ 89,90", info: "Prova nocturna com medalha especial." },
+  { nome: "Run Experience Lagoa Rodrigo de Freitas", data: "11/01", dataIso: "2026-01-11", cidade: "RJ", horario: "07:30", largada: "Parque da Catacumba, Lagoa", link: "https://www.riorunningtour.com.br", valor: "R$ 179,00", info: "Run Experience com vista da Lagoa." },
+  { nome: "Circuito Oceânico Niterói - Piratininga", data: "11/01", dataIso: "2026-01-11", cidade: "RJ", horario: "07:30", largada: "Praia de Piratininga, Niterói", link: "https://www.ticketsports.com.br", valor: "R$ 95,00", info: "Tradicional prova da Região Oceânica." },
+  { nome: "Corrida de São Sebastião (5k)", data: "20/01", dataIso: "2026-01-20", cidade: "RJ", horario: "07:30", largada: "Aterro do Flamengo", link: "https://www.ticketsports.com.br", valor: "R$ 115,00", info: "Feriado do Padroeiro do Rio." },
+  { nome: "Circuito do Sol 2026", data: "01/02", dataIso: "2026-02-01", cidade: "RJ", horario: "06:30", largada: "Aterro do Flamengo", link: "https://www.runningland.com.br", valor: "R$ 119,00", info: "Prova de alta velocidade." },
+  { nome: "Run Experience Quinta da Boa Vista", data: "15/02", dataIso: "2026-02-15", cidade: "RJ", horario: "07:30", largada: "São Cristóvão", link: "https://www.riorunningtour.com.br", valor: "R$ 169,00", info: "Percurso histórico e arborizado." },
+  { nome: "Circuito das Estações - Outono", data: "08/03", dataIso: "2026-03-08", cidade: "RJ", horario: "07:00", largada: "Aterro do Flamengo", link: "https://www.runningland.com.br", valor: "R$ 129,00", info: "Abertura do circuito nacional 2026." },
+  { nome: "Corrida das Poderosas (Etapa 1)", data: "15/03", dataIso: "2026-03-15", cidade: "RJ", horario: "07:00", largada: "Aterro do Flamengo", link: "https://www.riorunningtour.com.br", valor: "R$ 110,00", info: "Homenagem ao mês da mulher." },
+  { nome: "Run Experience Santa Teresa", data: "12/04", dataIso: "2026-04-12", cidade: "RJ", horario: "07:00", largada: "Largo do Curvelo, Santa Teresa", link: "https://www.riorunningtour.com.br", valor: "R$ 189,00", info: "Muitas subidas e vistas icónicas." },
+  { nome: "Meia do Porto - Etapa 5k", data: "26/04", dataIso: "2026-04-26", cidade: "RJ", horario: "07:00", largada: "Porto Maravilha", link: "https://www.ticketsports.com.br", valor: "R$ 110,00", info: "Percurso plano no Boulevard Olímpico." },
+  { nome: "Meia Maratona de Niterói (5k)", data: "17/05", dataIso: "2026-05-17", cidade: "RJ", horario: "07:00", largada: "Caminho Niemeyer, Niterói", link: "https://www.ticketsports.com.br", valor: "R$ 105,00", info: "Arquitetura e corrida à beira-mar." },
+  { nome: "Circuito das Estações - Inverno", data: "31/05", dataIso: "2026-05-31", cidade: "RJ", horario: "07:00", largada: "Aterro do Flamengo", link: "https://www.runningland.com.br", valor: "R$ 129,00", info: "Segunda etapa da temporada." },
+  { nome: "Maratona do Rio (Family Run 5k)", data: "04/06", dataIso: "2026-06-04", cidade: "RJ", horario: "08:00", largada: "Aterro do Flamengo", link: "https://www.ticketsports.com.br", valor: "R$ 160,00", info: "Feriado de Corpus Christi." },
+  { nome: "Run Experience Vidigal", data: "19/07", dataIso: "2026-07-19", cidade: "RJ", horario: "07:30", largada: "Base do Vidigal / Dois Irmãos", link: "https://www.riorunningtour.com.br", valor: "R$ 199,00", info: "Desafio técnico com vista deslumbrante." },
+  { nome: "Meia Maratona Internacional do Rio (5k)", data: "16/08", dataIso: "2026-08-16", cidade: "RJ", horario: "07:00", largada: "Leblon", link: "https://www.yescom.com.br", valor: "Em breve", info: "Uma das mais tradicionais da orla." },
+  { nome: "Run Experience Niterói - MAC", data: "23/08", dataIso: "2026-08-23", cidade: "RJ", horario: "07:30", largada: "Museu de Arte Contemporânea, Niterói", link: "https://www.riorunningtour.com.br", valor: "R$ 179,00", info: "Corrida pela orla de Niterói." },
+  { nome: "Circuito das Estações - Primavera", data: "20/09", dataIso: "2026-09-20", cidade: "RJ", horario: "07:00", largada: "Aterro do Flamengo", link: "https://www.runningland.com.br", valor: "R$ 129,00", info: "Terceira etapa da temporada." },
+  { nome: "Pink Run RJ (Outubro Rosa)", data: "11/10", dataIso: "2026-10-11", cidade: "RJ", horario: "07:30", largada: "Copacabana", link: "https://www.ticketsports.com.br", valor: "R$ 110,00", info: "Corrida solidária de prevenção." },
+  { nome: "Run Experience Cristo Redentor", data: "18/10", dataIso: "2026-10-18", cidade: "RJ", horario: "06:00", largada: "Parque Lage / Corcovado", link: "https://www.riorunningtour.com.br", valor: "R$ 219,00", info: "Subida épica aos pés do Cristo." },
+  { nome: "Run Experience Maricá - Ponta Negra", data: "08/11", dataIso: "2026-11-08", cidade: "RJ", horario: "07:00", largada: "Farol de Ponta Negra, Maricá", link: "https://www.riorunningtour.com.br", valor: "R$ 169,00", info: "Trilha e asfalto no litoral de Maricá." },
+  { nome: "Night Run RJ - Etapa 2", data: "21/11", dataIso: "2026-11-21", cidade: "RJ", horario: "20:00", largada: "Aterro do Flamengo", link: "https://www.runningland.com.br", valor: "R$ 135,00", info: "Corrida nocturna com festa." },
+  { nome: "Circuito das Estações - Verão", data: "13/12", dataIso: "2026-12-13", cidade: "RJ", horario: "07:00", largada: "Aterro do Flamengo", link: "https://www.runningland.com.br", valor: "R$ 129,00", info: "Encerramento do circuito 2026." }
+];
+
+const GlobalStyles = () => (
+  <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,700;0,800;0,900;1,900&family=Inter:wght@400;500;600;700;800&display=swap');
+    
+    .font-poppins {
+      font-family: 'Poppins', sans-serif;
+    }
+
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .race-card-shadow {
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
+    }
+
+    .ai-content-box p {
+      margin-bottom: 0.75rem;
+      line-height: 1.5;
+      font-size: 0.875rem;
+    }
+
+    .ai-content-box h3 {
+      font-size: 1rem;
+      font-weight: 800;
+      color: #1e293b;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+  `}</style>
+);
+
+const AIFormattedRenderer = ({ content }: { content: string | null }) => {
+  if (!content) return null;
+  const sections = content.split('\n').filter(line => line.trim() !== '');
+  return (
+    <div className="ai-content-box">
+      {sections.map((line, index) => {
+        if (line.startsWith('#') || (line === line.toUpperCase() && line.length > 5)) {
+          return (
+            <h3 key={index} className="flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-1 mb-3">
+              <div className="w-1 h-4 bg-orange-500 rounded-full"></div>
+              {line.replace(/#/g, '').trim()}
+            </h3>
+          );
+        }
+        if (line.startsWith('-') || line.startsWith('*') || /^\d+\./.test(line)) {
+          return (
+            <div key={index} className="flex gap-2 bg-slate-50 p-3 rounded-xl mb-2 border border-slate-100">
+              <CheckCircle size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-medium text-slate-700 m-0 leading-tight">
+                {line.replace(/^[-*\d.]+\s*/, '').trim()}
+              </p>
+            </div>
+          );
+        }
+        return <p key={index} className="text-slate-600 text-xs">{line}</p>;
+      })}
+    </div>
+  );
+};
+
+export const CorreRJView = ({ onBack }: { onBack: () => void }) => {
+  const [user, setUser] = useState<any>(null);
+  const [races, setRaces] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<string | null>(null);
+
+  const [iaLoading, setIaLoading] = useState(false);
+  const [iaContent, setIaContent] = useState<string | null>(null);
+  const [showIaModal, setShowIaModal] = useState(false);
+  const [currentIaType, setCurrentIaType] = useState("");
+  const [activeRace, setActiveRace] = useState<any>(null);
+
+  const [bgIndex, setBgIndex] = useState(0);
+
+  const apiKey = process.env.API_KEY || (window as any).process?.env?.API_KEY || "";
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof (window as any).__initial_auth_token !== 'undefined' && (window as any).__initial_auth_token) {
+          await signInWithCustomToken(auth, (window as any).__initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) { console.error("Erro auth:", err); }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBgIndex(prev => (prev + 1) % BG_IMAGES.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const racesRef = collection(db, 'artifacts', appId, 'public', 'data', 'races');
+    const unsubscribe = onSnapshot(racesRef, (snapshot) => {
+      let raceList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (raceList.length === 0) seedInitialData();
+      const sorted = raceList.sort((a, b) => new Date(a.dataIso).getTime() - new Date(b.dataIso).getTime());
+      setRaces(sorted);
+      setLoading(false);
+    }, () => setLoading(false));
+    return () => unsubscribe();
+  }, [user]);
+
+  const seedInitialData = async () => {
+    for (const race of INITIAL_PREDICTIONS) {
+      const raceId = `seed_${race.dataIso}_${race.nome.toLowerCase().replace(/\s/g, '_').normalize("NFD").replace(/[\u0300-\u036f]/g, "")}`;
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', raceId);
+      await setDoc(docRef, { ...race, lastScrape: new Date().toISOString() }, { merge: true });
+    }
+  };
+
+  const triggerNotification = (msg: string) => {
+    const newN = { id: Date.now(), msg, time: new Date().toLocaleTimeString(), read: false };
+    setNotifications(prev => [newN, ...prev]);
+  };
+
+  const callGemini = async (prompt: string, systemInstruction: string, type: string, race: any) => {
+    setIaLoading(true); setIaContent(null); setCurrentIaType(type); setActiveRace(race); setShowIaModal(true);
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          systemInstruction: { parts: [{ text: systemInstruction }] }
+        })
+      });
+      const data = await response.json();
+      setIaContent(data.candidates?.[0]?.content?.parts?.[0]?.text);
+    } catch (error) { setIaContent("Erro ao gerar conteúdo."); }
+    finally { setIaLoading(false); }
+  };
+
+  const handleGenerateTrainingPlan = (race: any) => {
+    callGemini(`Crie um plano de 4 semanas focado em 5km para "${race.nome}" em ${race.largada}. Responda em tópicos curtos.`, "Coach de elite, direto e prático.", "Plano de Treino", race);
+  };
+
+  const handleGenerateRaceTips = (race: any) => {
+    callGemini(`Dicas rápidas de terreno e logística para "${race.nome}" em ${race.largada}.`, "Guia local do Rio, direto ao ponto.", "Estratégia", race);
+  };
+
+  const runIAScraper = async () => {
+    if (!user) return;
+    setSyncing(true);
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: "Busque novas corridas 5k no RJ 2026 nos sites oficiais." }] }],
+          systemInstruction: { parts: [{ text: "Raspador JSON: nome, data, dataIso, cidade, horario, largada, link, valor, info." }] },
+          tools: [{ google_search: {} }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+      const data = await response.json();
+      const results = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text || "[]");
+      if (Array.isArray(results)) {
+        for (const race of results) {
+          const safeName = race.nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "_");
+          const raceId = `ai_${race.dataIso}_${safeName}`.toLowerCase();
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'races', raceId);
+          await setDoc(docRef, { ...race, lastScrape: new Date().toISOString(), cidade: "RJ" }, { merge: true });
+        }
+        setLastUpdate(new Date().toLocaleString());
+        triggerNotification("Calendário atualizado via IA!");
+      }
+    } catch (e) { triggerNotification("Erro na sincronização."); }
+    finally { setSyncing(false); }
+  };
+
+  const monthsOrder = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  
+  const groupedRaces = useMemo(() => {
+    const groups: any = {};
+    races.forEach(r => {
+      const date = new Date(r.dataIso + "T12:00:00Z");
+      const m = isNaN(date.getTime()) ? "A Definir" : monthsOrder[date.getUTCMonth()];
+      if (!groups[m]) groups[m] = [];
+      groups[m].push(r);
+    });
+    return groups;
+  }, [races]);
+
+  return (
+    <div className="min-h-screen bg-slate-100 absolute inset-0 z-50 overflow-y-auto custom-scrollbar">
+      <GlobalStyles />
+
+      {/* BACKGROUND DINÂMICO */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        {BG_IMAGES.map((img, idx) => (
+          <div
+            key={idx}
+            className="absolute inset-0 transition-opacity duration-[2000ms] ease-in-out"
+            style={{ 
+              backgroundImage: `url(${img})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              filter: 'blur(35px) brightness(0.85)',
+              opacity: bgIndex === idx ? 0.18 : 0,
+              zIndex: bgIndex === idx ? 1 : 0
+            }}
+          />
+        ))}
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-100/30 via-transparent to-slate-100/30 z-[2]"></div>
+      </div>
+
+      <div className="relative z-10 text-[#111827] pb-20">
+        
+        {/* Modal IA */}
+        {showIaModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white/95 w-full max-w-lg rounded-[28px] shadow-2xl overflow-hidden flex flex-col max-h-[80vh] border border-white">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white/50">
+                <div className="flex items-center gap-3">
+                  <Sparkles className="text-orange-600" size={20} />
+                  <div>
+                    <h3 className="font-poppins font-bold text-sm text-slate-900 uppercase tracking-tight">{currentIaType}</h3>
+                  </div>
+                </div>
+                <button onClick={() => setShowIaModal(false)} className="p-2 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
+                {iaLoading ? (
+                  <div className="py-10 flex flex-col items-center gap-4">
+                    <div className="w-10 h-10 border-4 border-slate-100 border-t-orange-600 rounded-full animate-spin"></div>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Analisando...</p>
+                  </div>
+                ) : <AIFormattedRenderer content={iaContent} />}
+              </div>
+              <div className="p-4 bg-slate-50/50 flex justify-center">
+                <button onClick={() => setShowIaModal(false)} className="px-8 py-3 bg-black text-white rounded-full text-xs font-bold uppercase tracking-widest transition-all active:scale-95">Fechar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Header Compacto */}
+        <header className="sticky top-0 z-50 glass-effect border-b border-slate-200/60 px-5 py-4 shadow-sm">
+          <div className="max-w-2xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button onClick={onBack} className="p-1 -ml-1 rounded-full hover:bg-slate-100 text-slate-500 transition-colors"><ArrowLeft size={18}/></button>
+              <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg rotate-2">
+                <Trophy size={20} className="text-orange-500" />
+              </div>
+              <div>
+                <h1 className="text-lg font-poppins font-black italic tracking-tighter uppercase leading-none">
+                  CORRE<span className="text-orange-600">RJ</span>
+                </h1>
+                <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">2026</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowNotifPanel(!showNotifPanel)} className="relative p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
+                <Bell size={18} className="text-slate-600"/>
+                {notifications.some(n => !n.read) && <span className="absolute top-2 right-2 w-2 h-2 bg-orange-600 border-2 border-white rounded-full"></span>}
+              </button>
+              <button onClick={runIAScraper} disabled={syncing} className="bg-orange-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-orange-700 transition-colors shadow-lg shadow-orange-100 active:scale-95">
+                <RefreshCcw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? '' : 'IA'}
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-2xl mx-auto px-5 pt-8">
+          {/* Dashboard Compacto */}
+          <div className="bg-slate-900 rounded-[32px] p-6 text-white mb-10 relative overflow-hidden shadow-2xl border border-white/5">
+            <div className="absolute top-0 right-0 p-8 opacity-[0.05] pointer-events-none">
+              <TrendingUp size={120} />
+            </div>
+            <div className="relative z-10 grid grid-cols-3 gap-4 text-center">
+              <div><p className="text-2xl font-black">{races.length}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Provas</p></div>
+              <div><p className="text-2xl font-black text-orange-500">5k</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Foco</p></div>
+              <div><p className="text-2xl font-black">{Object.keys(groupedRaces).length}</p><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Meses</p></div>
+            </div>
+          </div>
+
+          {/* Notificações Inline */}
+          {showNotifPanel && (
+            <div className="mb-10 bg-white/95 border border-slate-200 shadow-lg overflow-hidden animate-in slide-in-from-top-4 rounded-2xl backdrop-blur-sm">
+              <div className="px-4 py-2 bg-slate-50 border-b flex justify-between items-center text-[9px] font-bold text-slate-400 uppercase tracking-widest">Alertas recentes</div>
+              <div className="max-h-40 overflow-y-auto custom-scrollbar">
+                {notifications.length === 0 ? <p className="p-6 text-center text-xs text-slate-300 italic font-medium">Sem novidades por enquanto.</p> : notifications.map(n => (
+                  <div key={n.id} className="p-4 border-b border-slate-50 text-[11px] font-bold flex items-start gap-3 hover:bg-slate-50 transition-colors">
+                     <Zap size={12} className="text-orange-500 mt-0.5" /> {n.msg}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Listagem */}
+          {loading ? (
+            <div className="py-20 text-center flex flex-col items-center gap-4">
+              <div className="w-8 h-8 border-2 border-slate-200 border-t-orange-600 rounded-full animate-spin"></div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Sincronizando Calendário...</p>
+            </div>
+          ) : (
+            <div className="space-y-12">
+              {monthsOrder.map(month => groupedRaces[month] && (
+                <section key={month}>
+                  <div className="flex items-center gap-4 mb-6 sticky top-[80px] z-20 glass-effect py-2 px-4 rounded-full border border-slate-200/40 shadow-sm">
+                    <h3 className="text-2xl font-poppins font-black uppercase italic tracking-tighter text-slate-900">{month}</h3>
+                    <div className="h-px flex-1 bg-slate-200"></div>
+                  </div>
+                  <div className="space-y-6">
+                    {groupedRaces[month].map((race: any) => (
+                      <RaceCard key={race.id} race={race} onPlan={() => handleGenerateTrainingPlan(race)} onTips={() => handleGenerateRaceTips(race)} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </main>
+        
+        <footer className="mt-20 px-8 text-center relative z-10">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] leading-loose">
+            CORRE RJ • ESTRATÉGIA PARA 2026<br/>
+            DESENVOLVIDO COM GEMINI IA
+          </p>
+        </footer>
+      </div>
+    </div>
+  );
+};
+
+const RaceCard = ({ race, onPlan, onTips }: { race: any, onPlan: () => void, onTips: () => void, key?: any }) => (
+  <div className="bg-white/95 rounded-[28px] p-5 border border-slate-200 hover:border-orange-200 transition-all race-card-shadow group relative overflow-hidden">
+    <div className="flex justify-between items-start mb-4">
+      <div className="flex-1 pr-4">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="bg-slate-900 text-white text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm">5KM</span>
+          <span className="text-slate-400 text-[9px] font-bold uppercase tracking-widest">{race.cidade}</span>
+        </div>
+        <h4 className="text-lg font-poppins font-black leading-tight text-slate-800 uppercase italic group-hover:text-orange-600 transition-colors tracking-tight">
+          {race.nome}
+        </h4>
+      </div>
+      <div className="text-right shrink-0">
+         <p className="text-2xl font-poppins font-black tracking-tighter text-slate-900 leading-none">{race.data}</p>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="bg-slate-50/50 p-3 rounded-xl flex items-center gap-2 border border-slate-100/50">
+        <Clock size={14} className="text-slate-400" />
+        <p className="text-xs font-bold text-slate-700">{race.horario}</p>
+      </div>
+      <div className="bg-slate-50/50 p-3 rounded-xl flex items-center gap-2 border border-slate-100/50">
+        <DollarSign size={14} className="text-slate-400" />
+        <p className="text-xs font-bold text-slate-700">{race.valor}</p>
+      </div>
+    </div>
+
+    <div className="flex items-start gap-2 mb-5 px-1">
+      <MapPin size={14} className="text-orange-600 mt-0.5 shrink-0" />
+      <p className="text-[11px] font-semibold text-slate-500 leading-tight">{race.largada}</p>
+    </div>
+
+    <div className="flex gap-2 mb-4">
+      <button onClick={onPlan} className="flex-1 py-2.5 bg-orange-50 text-orange-600 rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-orange-600 hover:text-white transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1">✨ Treino IA</button>
+      <button onClick={onTips} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-black transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1">✨ Estratégia</button>
+    </div>
+
+    <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
+      <p className="text-[9px] font-medium text-slate-400 italic line-clamp-1 flex-1 pr-4">"{race.info}"</p>
+      <a href={race.link} target="_blank" rel="noopener noreferrer" className="text-[10px] font-black uppercase text-slate-900 flex items-center gap-1 hover:text-orange-600 transition-colors group">
+        Inscrição <ExternalLink size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+      </a>
+    </div>
+  </div>
+);

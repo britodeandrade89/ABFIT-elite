@@ -3,9 +3,9 @@ import {
   User as UserIcon, Loader2, Dumbbell, 
   CheckCircle2, HeartPulse, Trophy, Camera 
 } from 'lucide-react';
-import { Logo, Card, BackgroundWrapper, EliteFooter, WeatherWidget } from './components/Layout';
+import { Logo, Card, BackgroundWrapper, EliteFooter, WeatherWidget, NotificationBadge } from './components/Layout';
 import { ProfessorDashboard, StudentManagement, WorkoutEditorView, CoachAssessmentView, PeriodizationView, RunningWorkoutManager } from './components/CoachFlow';
-import { WorkoutSessionView, WorkoutCounterView, StudentAssessmentView, RunningDashboard } from './components/StudentFlow';
+import { WorkoutSessionView, WorkoutCounterView, StudentAssessmentView, CorreRJView } from './components/StudentFlow';
 import { InstallPrompt } from './components/InstallPrompt';
 import { collection, query, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -168,17 +168,7 @@ export default function App() {
             {
               id: 'treino-a-fixed',
               title: 'Treino A',
-              exercises: [
-                { id: 'ex1', name: 'Supino Reto com Barra (Barbell Bench Press)', description: 'Peitoral maior, deltoide anterior, tríceps.' },
-                { id: 'ex2', name: 'Supino Inclinado com Halteres (Incline Dumbbell Press)', description: 'Foco na porção superior do peitoral.' },
-                { id: 'ex3', name: 'Desenvolvimento de Ombro (Overhead Press)', description: 'Ombros e tríceps com força total.' },
-                { id: 'ex4', name: 'Remada Alta (Upright Row) - Modificada', description: 'Trapézio e deltoide lateral.' },
-                { id: 'ex5', name: 'Leg Press (Pernas)', description: 'Quadríceps e glúteos com alta carga.' },
-                { id: 'ex6', name: 'Safety Bar Squat (Agachamento com Barra de Segurança)', description: 'Agachamento seguro para coluna e ombros.' },
-                { id: 'ex7', name: 'Sissy Squat (Agachamento Isolado do Joelho)', description: 'Isolamento extremo de quadríceps.' },
-                { id: 'ex8', name: 'Swiss Ball Crunch (Crunch na Bola Suíça)', description: 'Abdominal com instabilidade.' },
-                { id: 'ex9', name: 'Prancha (Plank)', description: 'Estabilidade do Core.' }
-              ]
+              exercises: [] // EMPTY EXERCISES AS REQUESTED
             }
           ]
         }, 
@@ -262,6 +252,10 @@ export default function App() {
                       <Camera size={10} className="text-white" />
                    </div>
                 </label>
+                {/* Notification Bell over Profile */}
+                <div className="absolute -top-3 -right-3 z-20">
+                   <NotificationBadge notifications={selectedStudent.notifications || []} onClick={() => alert("Notificações em breve")} />
+                </div>
              </div>
              <WeatherWidget />
           </div>
@@ -310,7 +304,7 @@ export default function App() {
       {view === 'WORKOUTS' && selectedStudent && <WorkoutSessionView user={selectedStudent} onBack={() => setView('DASHBOARD')} onSave={handleSaveData} />}
       {view === 'WORKOUT_COUNTER' && selectedStudent && <WorkoutCounterView student={selectedStudent} onBack={() => setView('DASHBOARD')} onSaveHistory={(h) => handleSaveData(selectedStudent.id, { workoutHistory: h })} />}
       {view === 'STUDENT_ASSESSMENT' && selectedStudent && <StudentAssessmentView student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
-      {view === 'CORRE_RJ' && selectedStudent && <RunningDashboard student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
+      {view === 'CORRE_RJ' && selectedStudent && <CorreRJView onBack={() => setView('DASHBOARD')} />}
       
       {view === 'PROFESSOR_DASH' && <ProfessorDashboard students={allStudentsForCoach} onLogout={() => setView('LOGIN')} onSelect={(s) => { setSelectedStudent(s); setView('STUDENT_MGMT'); }} />}
       {view === 'STUDENT_MGMT' && selectedStudent && <StudentManagement student={selectedStudent} onBack={() => setView('PROFESSOR_DASH')} onNavigate={setView} />}

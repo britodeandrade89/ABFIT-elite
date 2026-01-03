@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ArrowLeft, LogOut, ChevronRight, Edit3, Plus, Ruler, 
   Trash2, Video, Play, Loader2, Brain, Activity, RotateCcw,
   Target, TrendingUp, Flame, BookOpen, Clock, ListFilter,
   Save, Layout, Zap, Footprints, Sparkles, Repeat, AlertCircle, Dumbbell,
-  RefreshCcw, Image as ImageIcon, Scale, MousePointer2, FilePlus, Check, Calendar
+  RefreshCcw, Image as ImageIcon, Scale, MousePointer2, FilePlus, Check, Calendar,
+  ZapIcon, Lightbulb, UserPlus, FileText
 } from 'lucide-react';
 import { Card, EliteFooter, Logo } from './Layout';
 import { Student, Exercise, PhysicalAssessment, PeriodizationPlan, Workout, AppNotification } from '../types';
-import { callGemini, generateExerciseImage, generatePeriodizationPlan } from '../services/gemini';
+import { callGemini, generateExerciseImage, generatePeriodizationPlan, generateBioInsight, generateTechnicalCue, analyzeExerciseBiomechanics } from '../services/gemini';
 import { doc, setDoc } from 'firebase/firestore';
 import { db, appId } from '../services/firebase';
 import { RunTrackCoachView } from './RunTrack';
@@ -16,122 +17,319 @@ import { RunTrackCoachView } from './RunTrack';
 // --- DATABASE ATUALIZADA (PRESCREVE AI) ---
 const EXERCISE_DATABASE: Record<string, string[]> = {
   "Peito": [
-    "Supino Reto com HBL", "Supino reto com HBC", "Supino reto alternado com HBC", 
-    "Supino inclinado com HBL", "Supino inclinado com HBC", "Supino inclinado alternado com HBC", 
-    "Supino declinado com HBL", "Supino declinado com HBC", "Supino declinado alternado com HBC", 
-    "Crucifixo aberto com HBC no banco reto", "Crucifixo aberto alternado com HBC no banco reto", 
-    "Crucifixo aberto com HBC no banco declinado", "Crucifixo aberto alternado com HBC no banco declinado", 
-    "Crucifixo aberto com HBC no banco inclinado", "Crucifixo aberto alternado com HBC no banco inclinado", 
-    "Supino sentado aberto na máquina", "Supino unilateral sentado aberto na máquina", "Supino alternado sentado aberto na máquina", 
-    "Supino sentado fechado na máquina", "Supino unilateral sentado fechado na máquina", "Supino alternado sentado fechado na máquina", 
-    "Supino inclinado aberto na máquina", "Supino unilateral inclinado aberto na máquina", "Supino alternado inclinado aberto na máquina", 
-    "Supino inclinado fechado na máquina", "Supino unilateral inclinado fechado na máquina", "Supino alternado inclinado fechado na máquina", 
-    "Supino deitado aberto na máquina", "Supino unilateral deitado aberto na máquina", "Supino alternado deitado aberto na máquina", 
-    "Supino deitado fechado na máquina", "Supino unilateral deitado fechado na máquina", "Supino alternado deitado fechado na máquina", 
-    "Supino banco 75º aberto no crossover", "Supino alternado banco 75° aberto no crossover", "Supino banco 75º fechado no crossover", 
-    "Supino alternado banco 75° fechado no crossover", "Supino banco 45º aberto no crossover", "Supino alternado banco 45° no crossover", 
-    "Supino banco 45º fechado no crossover", "Supino alternado banco 45° fechado no crossover", "Supino banco reto aberto no crossover", 
-    "Supino alternado banco reto aberto no crossover", "Supino banco reto fechado no crossover", "Supino alternado banco reto fechado no crossover", 
-    "Crucifixo aberto na máquina", "Crucifixo alternado na máquina", "Crucifixo unilateral na máquina", 
-    "Crucifixo em pé no cross polia média", "Crucifixo em pé no cross polia alta", "Voador peitoral", 
-    "PullUp na polia baixa pegada supinada", "Supino aberto no banco reto no smith", "Supino aberto banco inclinado no smith", 
-    "Supino aberto banco declinado no smith", "Extensão de cotovelos no solo (Flexão de Braços)"
+    "Crucifixo aberto alternado com HBC no banco declinado",
+    "Crucifixo aberto alternado com HBC no banco inclinado",
+    "Crucifixo aberto alternado com HBC no banco reto",
+    "Crucifixo aberto com HBC no banco declinado",
+    "Crucifixo aberto com HBC no banco inclinado",
+    "Crucifixo aberto com HBC no banco reto",
+    "Crucifixo aberto na máquina",
+    "Crucifixo alternado na máquina",
+    "Crucifixo em pé no cross polia alta",
+    "Crucifixo em pé no cross polia média",
+    "Crucifixo unilateral na máquina",
+    "Extensão de cotovelos no solo (Flexão de Braços)",
+    "PullUp na polia baixa pegada supinada",
+    "Supino aberto banco declinado no smith",
+    "Supino aberto banco inclinado no smith",
+    "Supino aberto no banco reto no smith",
+    "Supino alternado banco 45° fechado no crossover",
+    "Supino alternado banco 45° no crossover",
+    "Supino alternado banco 75° aberto no crossover",
+    "Supino alternado banco 75° fechado no crossover",
+    "Supino alternado banco reto aberto no crossover",
+    "Supino alternado banco reto fechado no crossover",
+    "Supino alternado deitado aberto na máquina",
+    "Supino alternado deitado fechado na máquina",
+    "Supino alternado inclinado aberto na máquina",
+    "Supino alternado inclinado fechado na máquina",
+    "Supino alternado sentado aberto na máquina",
+    "Supino alternado sentado fechado na máquina",
+    "Supino banco 45º aberto no crossover",
+    "Supino banco 45º fechado no crossover",
+    "Supino banco 75º aberto no crossover",
+    "Supino banco 75º fechado no crossover",
+    "Supino banco reto aberto no crossover",
+    "Supino banco reto fechado no crossover",
+    "Supino declinado alternado com HBC",
+    "Supino declinado com HBC",
+    "Supino declinado com HBL",
+    "Supino deitado aberto na máquina",
+    "Supino deitado fechado na máquina",
+    "Supino inclinado aberto na máquina",
+    "Supino inclinado alternado com HBC",
+    "Supino inclinado com HBC",
+    "Supino inclinado com HBL",
+    "Supino inclinado fechado na máquina",
+    "Supino Reto com HBL",
+    "Supino reto alternado com HBC",
+    "Supino reto com HBC",
+    "Supino sentado aberto na máquina",
+    "Supino sentado fechado na máquina",
+    "Supino unilateral deitado aberto na máquina",
+    "Supino unilateral deitado fechado na máquina",
+    "Supino unilateral inclinado aberto na máquina",
+    "Supino unilateral inclinado fechado na máquina",
+    "Supino unilateral sentado aberto na máquina",
+    "Supino unilateral sentado fechado na máquina",
+    "Voador peitoral"
   ],
   "Ombro": [
-    "Desenvolvimento em pé aberto com HBM", "Desenvolvimento em pé fechado supinado com HBM", "Desenvolvimento em pé fechado pronado with HBM",
-    "Desenvolvimento em pé aberto com HBC", "Desenvolvimento em pé fechado supinado com HBC", "Desenvolvimento em pé fechado pronado com HBC",
-    "Desenvolvimento em pé arnold com HBC", "Desenvolvimento banco 75º aberto com HBM", "Desenvolvimento banco 75º fechado supinado com HBM",
-    "Desenvolvimento banco 75º fechado pronado com HBM", "Desenvolvimento banco 75º aberto com HBC", "Desenvolvimento banco 75º fechado supinado com HBC",
-    "Desenvolvimento banco 75º fechado pronado com HBC", "Desenvolvimento banco 75º arnold com HBC", "Remada alta em pé com HBM",
-    "Remada alta em pé com HBL", "Remada alta em pé com HBC", "Remada alta em pé no cross",
-    "Remada alta em decúbito dorsal cross", "Remada alta banco 45º cross", "Flexão de ombro unilateral no cross",
-    "Flexão de ombro unilateral com HBC pegada neutra", "Flexão de ombro unilateral com HBC pegada pronada", "Flexão de ombro simultâneo com HBC pegada neutra",
-    "Flexão de ombro simultâneo com HBC pegada pronada", "Flexão de ombro com HBM pegada pronada", "Abdução de ombros em pé com HBC pegada pronada",
-    "Abdução de ombros em pé com HBC pegada neutra", "Abdução de ombros banco 75º com HBC pegada pronada", "Abdução de ombros banco 75º com HBC pegada neutra",
-    "Abdução de ombros unilateral em decúbito lateral no banco 45º HBC", "Abdução de ombros unilateral em decúbito lateral no banco 45º no cross", "Abdução de ombros unilateral no cross",
-    "Remada alta com Kettlebell", "Desenvolvimento aberto na máquina", "Desenvolvimento aberto banco 75º no smith",
-    "Desenvolvimento fechado supinado banco 75º no smith", "Desenvolvimento fechado pronado banco 75º no smith", "Encolhimento de ombros no cross",
-    "Encolhimento de ombros com HBM", "Encolhimento de ombros com HBC", "Remada alta com HBM no banco 45º"
+    "Abdução de ombros banco 75º com HBC pegada neutra",
+    "Abdução de ombros banco 75º com HBC pegada pronada",
+    "Abdução de ombros em pé com HBC pegada neutra",
+    "Abdução de ombros em pé com HBC pegada pronada",
+    "Abdução de ombros unilateral em decúbito lateral no banco 45º HBC",
+    "Abdução de ombros unilateral em decúbito lateral no banco 45º no cross",
+    "Abdução de ombros unilateral no cross",
+    "Desenvolvimento aberto banco 75º no smith",
+    "Desenvolvimento aberto na máquina",
+    "Desenvolvimento banco 75º aberto com HBC",
+    "Desenvolvimento banco 75º aberto com HBM",
+    "Desenvolvimento banco 75º arnold com HBC",
+    "Desenvolvimento banco 75º fechado pronado com HBC",
+    "Desenvolvimento banco 75º fechado pronado com HBM",
+    "Desenvolvimento banco 75º fechado supinado com HBC",
+    "Desenvolvimento banco 75º fechado supinado com HBM",
+    "Desenvolvimento em pé aberto com HBC",
+    "Desenvolvimento em pé aberto com HBM",
+    "Desenvolvimento em pé arnold com HBC",
+    "Desenvolvimento em pé fechado pronado com HBC",
+    "Desenvolvimento em pé fechado pronado com HBM",
+    "Desenvolvimento em pé fechado supinado com HBC",
+    "Desenvolvimento em pé fechado supinado com HBM",
+    "Desenvolvimento fechado pronado banco 75º no smith",
+    "Desenvolvimento fechado supinado banco 75º no smith",
+    "Encolhimento de ombros com HBC",
+    "Encolhimento de ombros with HBM",
+    "Encolhimento de ombros no cross",
+    "Flexão de ombro with HBM pegada pronada",
+    "Flexão de ombro simultâneo com HBC pegada neutra",
+    "Flexão de ombro simultâneo com HBC pegada pronada",
+    "Flexão de ombro unilateral com HBC pegada neutra",
+    "Flexão de ombro unilateral com HBC pegada pronada",
+    "Flexão de ombro unilateral no cross",
+    "Remada alta banco 45º cross",
+    "Remada alta com HBM no banco 45º",
+    "Remada alta com Kettlebell",
+    "Remada alta em decúbito dorsal cross",
+    "Remada alta em pé com HBC",
+    "Remada alta em pé com HBL",
+    "Remada alta em pé com HBM",
+    "Remada alta em pé no cross"
   ],
   "Triceps": [
-    "Tríceps testa simultâneo no cross", "Tríceps testa unilateral no cross", "Tríceps testa unilateral HBC banco reto",
-    "Tríceps testa simultâneo HBC banco reto", "Tríceps testa HBM banco reto", "Tríceps supinado com HBM banco reto",
-    "Tríceps supinado no smith banco reto", "Tríceps supinado pegada neutra com HBC", "Tríceps mergulho no banco reto",
-    "Tríceps em pé francês com HBC unilateral", "Tríceps em pé francês com HBC simultâneo", "Tríceps banco 75º francês com HBC unilateral",
-    "Tríceps banco 75º francês com HBC simultâneo", "Tríceps coice curvado com HBC simultâneo", "Tríceps coice curvado com HBC unilateral",
-    "Tríceps francês no cross unilateral", "Tríceps francês no cross simultâneo", "Tríceps no cross com corda",
-    "Tríceps no cross com barra reta", "Tríceps no cross com barra V", "Tríceps no cross com barra W",
-    "Tríceps no cross com barra reta inverso", "Tríceps no cross inverso unilateral", "Tríceps coice curvado no cross",
-    "Tríceps superman no cross segurando nos cabos", "Extensão de cotovelos fechados no solo (Flexão de braços)"
+    "Extensão de cotovelos fechados no solo (Flexão de braços)",
+    "Tríceps banco 75º francês com HBC simultâneo",
+    "Tríceps banco 75º francês com HBC unilateral",
+    "Tríceps coice curvado com HBC simultâneo",
+    "Tríceps coice curvado com HBC unilateral",
+    "Tríceps coice curvado no cross",
+    "Tríceps em pé francês com HBC simultâneo",
+    "Tríceps em pé francês com HBC unilateral",
+    "Tríceps francês no cross simultâneo",
+    "Tríceps francês no cross unilateral",
+    "Tríceps mergulho no banco reto",
+    "Tríceps no cross com barra reta",
+    "Tríceps no cross com barra reta inverso",
+    "Tríceps no cross com barra V",
+    "Tríceps no cross com barra W",
+    "Tríceps no cross com corda",
+    "Tríceps no cross inverso unilateral",
+    "Tríceps superman no cross segurando nos cabos",
+    "Tríceps supinado com HBM banco reto",
+    "Tríceps supinado no smith banco reto",
+    "Tríceps supinado pegada neutra com HBC",
+    "Tríceps testa HBM banco reto",
+    "Tríceps testa simultâneo HBC banco reto",
+    "Tríceps testa simultâneo no cross",
+    "Tríceps testa unilateral HBC banco reto",
+    "Tríceps testa unilateral no cross"
   ],
   "Costas e Cintura Escapular": [
-    "Remada curvada supinada com HBM", "Remada curvada aberta com HBM", "Remada curvada supinada com HBC",
-    "Remada curvada aberta com HBC", "Remada curvada supinada com cross", "Remada curvada aberta com cross",
-    "Remada curvada supinada com cross unilateral", "Remada curvada aberta com cross unilateral", "Remada no banco em 3 apoios pegada neutra no cross unilateral",
-    "Remada no banco em 3 apoios pegada supinada no cross unilateral", "Remada no banco em 3 apoios pegada neutra com HBC unilateral", "Remada no banco em 3 apoios pegada supinada com HBC unilateral",
-    "Remada no banco em 3 apoios pegada aberta com HBC unilateral", "Remada aberta com barra reta no cross polia média", "Remada supinada com barra reta no cross polia média",
-    "Puxada aberta com barra reta no cross polia alta", "Puxada supinada com barra reta no cross polia alta", "Puxada aberta no pulley alto",
-    "Puxada supinada no pulley alto", "Puxada aberta com barra romana pulley alto", "Puxada com triângulo no pulley alto",
-    "Remada baixa com barra reta", "Remada baixa barra reta pegada supinada", "Remada baixa com triângulo",
-    "Remada aberta na máquina", "Remada fechada na máquina", "Remada cavalo com HBL",
-    "Remada aberta declinada no smith", "Extensão de ombros no cross barra reta", "Pullover no banco reto com HBC",
-    "Crucifixo inverso na máquina", "Crucifixo inverso unilateral no cross polia média", "Crucifixo inverso simultâneo no cross polia média",
-    "Remada aberta com HBC decúbito ventral no banco 45°", "Remada aberta alternada com HBC decúbito ventral no banco 45°", "Remada fechada com HBC decúbito ventral no banco 45°",
-    "Remada fechada alternada com HBC decubito ventral no banco 45°"
+    "Crucifixo inverso na máquina",
+    "Crucifixo inverso simultâneo no cross polia média",
+    "Crucifixo inverso unilateral no cross polia média",
+    "Extensão de ombros no cross barra reta",
+    "Pullover no banco reto com HBC",
+    "Puxada aberta com barra reta no cross polia alta",
+    "Puxada aberta com barra romana pulley alto",
+    "Puxada aberta no pulley alto",
+    "Puxada com triângulo no pulley alto",
+    "Puxada supinada com barra reta no cross polia alta",
+    "Puxada supinada no pulley alto",
+    "Remada aberta com barra reta no cross polia média",
+    "Remada aberta com HBC decúbito ventral no banco 45°",
+    "Remada aberta alternada com HBC decúbito ventral no banco 45°",
+    "Remada aberta declinada no smith",
+    "Remada aberta na máquina",
+    "Remada baixa barra reta pegada supinada",
+    "Remada baixa com barra reta",
+    "Remada baixa com triângulo",
+    "Remada cavalo com HBL",
+    "Remada curvada aberta com cross",
+    "Remada curvada aberta com cross unilateral",
+    "Remada curvada aberta com HBC",
+    "Remada curvada aberta com HBM",
+    "Remada curvada supinada com cross",
+    "Remada curvada supinada com cross unilateral",
+    "Remada curvada supinada com HBC",
+    "Remada curvada supinada com HBM",
+    "Remada fechada alternada com HBC decubito ventral no banco 45°",
+    "Remada fechada com HBC decúbito ventral no banco 45°",
+    "Remada fechada na máquina",
+    "Remada no banco em 3 apoios pegada aberta com HBC unilateral",
+    "Remada no banco em 3 apoios pegada neutra com HBC unilateral",
+    "Remada no banco em 3 apoios pegada neutra no cross unilateral",
+    "Remada no banco em 3 apoios pegada supinada com HBC unilateral",
+    "Remada no banco em 3 apoios pegada supinada no cross unilateral",
+    "Remada supinada com barra reta no cross polia média"
   ],
   "Biceps": [
-    "Bíceps em pé com HBM pegada supinada", "Bíceps em pé com HBM pegada pronada", "Bíceps em pé com HBC pegada supinada simultâneo",
-    "Bíceps em pé com HBC pegada neutra simultâneo", "Bíceps em pé com HBC pegada pronada simultâneo", "Bíceps em pé com HBC pegada supinada unilateral",
-    "Bíceps em pé com HBC pegada neutra unilateral", "Bíceps em pé com HBC pegada pronada unilateral", "Bíceps banco 75º com HBC pegada supinada simultâneo",
-    "Bíceps banco 75º com HBC pegada neutra simultâneo", "Bíceps banco 75º com HBC pegada pronada simultâneo", "Bíceps banco 75º com HBC pegada supinada unilateral",
-    "Bíceps banco 75º com HBC pegada neutra unilateral", "Bíceps banco 75º com HBC pegada pronada unilateral", "Bíceps banco 45º com HBC pegada supinada simultâneo",
-    "Bíceps banco 45º com HBC pegada neutra simultâneo", "Bíceps banco 45º com HBC pegada pronada simultâneo", "Bíceps banco 45º com HBC pegada supinada unilateral",
-    "Bíceps banco 45º com HBC pegada neutra unilateral", "Bíceps banco 45º com HBC pegada pronada unilateral", "Bíceps em pé com HBC pegada supinada alternado",
-    "Bíceps em pé com HBC pegada neutra alternado", "Bíceps em pé com HBC pegada pronada alternado", "Bíceps concentrado com HBC unilateral",
-    "Bíceps no banco scott com HBC simultâneo", "Bíceps no banco scott com HBC unilateral", "Bíceps no banco scott com HBW simultâneo",
-    "Bíceps no banco scott com HBM supinado", "Bíceps no banco scott com HBM pronado", "Bíceps no cross barra reta",
-    "Bíceps no cross polia baixa unilateral", "Bíceps superman no cross simultâneo", "Bíceps superman no cross unilateral"
+    "Bíceps banco 45º com HBC pegada neutra simultâneo",
+    "Bíceps banco 45º com HBC pegada neutra unilateral",
+    "Bíceps banco 45º com HBC pegada pronada simultâneo",
+    "Bíceps banco 45º com HBC pegada pronada unilateral",
+    "Bíceps banco 45º com HBC pegada supinada simultâneo",
+    "Bíceps banco 45º com HBC pegada supinada unilateral",
+    "Bíceps banco 75º com HBC pegada neutra simultâneo",
+    "Bíceps banco 75º com HBC pegada neutra unilateral",
+    "Bíceps banco 75º com HBC pegada pronada simultâneo",
+    "Bíceps banco 75º com HBC pegada pronada unilateral",
+    "Bíceps banco 75º com HBC pegada supinada simultâneo",
+    "Bíceps banco 75º com HBC pegada supinada unilateral",
+    "Bíceps concentrado com HBC unilateral",
+    "Bíceps em pé com HBC pegada neutra alternado",
+    "Bíceps em pé com HBC pegada neutra simultâneo",
+    "Bíceps em pé com HBC pegada neutra unilateral",
+    "Bíceps em pé com HBC pegada pronada alternado",
+    "Bíceps em pé com HBC pegada pronada simultâneo",
+    "Bíceps em pé com HBC pegada pronada unilateral",
+    "Bíceps em pé com HBC pegada supinada alternado",
+    "Bíceps em pé com HBC pegada supinada simultâneo",
+    "Bíceps em pé com HBC pegada supinada unilateral",
+    "Bíceps em pé com HBM pegada pronada",
+    "Bíceps em pé com HBM pegada supinada",
+    "Bíceps no banco scott with HBC simultâneo",
+    "Bíceps no banco scott with HBC unilateral",
+    "Bíceps no banco scott with HBM pronado",
+    "Bíceps no banco scott with HBM supinado",
+    "Bíceps no banco scott with HBW simultâneo",
+    "Bíceps no cross barra reta",
+    "Bíceps no cross polia baixa unilateral",
+    "Bíceps superman no cross simultâneo",
+    "Bíceps superman no cross unilateral"
   ],
   "Core e Abdomen": [
-    "Abdominal supra no solo", "Abdominal supra na bola", "Abdominal supra no bosu",
-    "Abdominal diagonal no solo", "Abdominal diagonal na bola", "Abdominal diagonal no bosu",
-    "Abdominal infra no solo puxando as pernas", "Abdominal infra pernas estendidas", "Abdominal vela no solo",
-    "Prancha ventral no solo em isometria", "Prancha lateral no solo em isometria", "Prancha ventral no bosu em isometria",
-    "Prancha ventral na bola em isometria", "Prancha lateral no bosu em isometria", "Prancha lateral na bola em isometria"
+    "Abdominal diagonal na bola",
+    "Abdominal diagonal no bosu",
+    "Abdominal diagonal no solo",
+    "Abdominal infra no solo puxando as pernas",
+    "Abdominal infra pernas estendidas",
+    "Abdominal supra na bola",
+    "Abdominal supra no bosu",
+    "Abdominal supra no solo",
+    "Abdominal vela no solo",
+    "Prancha lateral na bola em isometria",
+    "Prancha lateral no bosu em isometria",
+    "Prancha lateral no solo em isometria",
+    "Prancha ventral na bola em isometria",
+    "Prancha ventral no bosu em isometria",
+    "Prancha ventral no solo em isometria"
   ],
   "Paravertebrais": [
-    "Mata-borrão isométrico no solo (super-man)", "Perdigueiro em isometria no solo", "Elevação de quadril em isometria no solo"
+    "Elevação de quadril em isometria no solo",
+    "Mata-borrão isométrico no solo (super-man)",
+    "Perdigueiro em isometria no solo"
   ],
   "Quadríceps e Adutores": [
-    "Agachamento livre com HBL", "Agachamento livre com HBL barra sobre ombros", "Agachamento livre com HBM barra sobre ombros",
-    "Agachamento no Smith barra sobre os ombros", "Agachamento no hack machine", "Agachamento no smith",
-    "Agachamento no sissy", "Agachamento livre com HBC", "Agachamento livre",
-    "Levantar e sentar no banco reto", "Levantar e sentar no banco reto com HBC", "Levantar e sentar do banco reto com HBM",
-    "Agachamento em passada com HBC", "Agachamento em passada com HBM", "Agachamento em passada com HBL",
-    "Agachamento búlgaro", "Agachamento em passada com step a frente", "Agachamento em passada com step a frente com HBC",
-    "Agachamento em passada com step a frente com HBM", "Agachamento em passada com step a frente com HBL", "Agachamento em passada com step atrás",
-    "Agachamento em passada com step atrás com HBC", "Agachamento em passada com step atrás com HBM", "Agachamento em passada com step atrás com HBL",
-    "Agachamento em passada no smith", "Agachamento em passada com step a frente no smith", "Agachamento em passada com step atrás no Smith",
-    "Leg press inclinado", "Leg press inclinado unilateral", "Leg press horizontal",
-    "Leg press horizontal unilateral", "Cadeira extensora", "Cadeira extensora unilateral",
-    "Cadeira adutora", "Adução de quadril em pé no cross", "Adução de quadril em decúbito lateral no solo",
-    "Adução de quadril em decúbito dorsal"
+    "Adução de quadril em decúbito dorsal",
+    "Adução de quadril em decúbito lateral no solo",
+    "Adução de quadril em pé no cross",
+    "Agachamento búlgaro",
+    "Agachamento em passada com HBC",
+    "Agachamento em passada com HBL",
+    "Agachamento em passada com HBM",
+    "Agachamento em passada com step a frente com HBC",
+    "Agachamento em passada com step a frente com HBL",
+    "Agachamento em passada com step a frente com HBM",
+    "Agachamento em passada com step a frente",
+    "Agachamento em passada com step atrás com HBC",
+    "Agachamento em passada com step atrás com HBL",
+    "Agachamento em passada com step atrás com HBM",
+    "Agachamento em passada com step atrás",
+    "Agachamento em passada no smith",
+    "Agachamento em passada com step a frente no smith",
+    "Agachamento em passada com step atrás no Smith",
+    "Agachamento livre com HBC",
+    "Agachamento livre com HBL barra sobre ombros",
+    "Agachamento livre with HBL",
+    "Agachamento livre with HBM barra sobre ombros",
+    "Agachamento livre",
+    "Agachamento no hack machine",
+    "Agachamento no sissy",
+    "Agachamento no Smith barra sobre os ombros",
+    "Agachamento no smith",
+    "Cadeira adutora",
+    "Cadeira extensora alternado",
+    "Cadeira extensora unilateral",
+    "Cadeira extensora",
+    "Flexão de quadril e joelho em decúbito dorsal no solo com caneleira",
+    "Flexão de quadril e joelho em pé com caneleira",
+    "Flexão de quadril e joelho em pé no cross",
+    "Flexão de quadril em decúbito dorsal no solo com caneleira",
+    "Flexão de quadril em pé com caneleira",
+    "Flexão de quadril em pé no cross",
+    "Leg press horizontal unilateral",
+    "Leg press horizontal",
+    "Leg press inclinado unilateral",
+    "Leg press inclinado",
+    "Levantar e sentar do banco reto com HBM",
+    "Levantar e sentar no banco reto com HBC",
+    "Levantar e sentar no banco reto"
   ],
   "Glúteos e Posteriores": [
-    "Levantamento terra com HBM", "Levantamento terra com HBC", "Levantamento terra com HBL",
-    "Levantamento terra no cross", "Levantamento terra romeno com HBM", "Elevação de Quadril no solo com anilha",
-    "Elevação de quadril no banco reto com HBM", "Stiff com HBM simultâneo", "Stiff com HBC simultâneo",
-    "Stiff com HBC unilateral", "Stiff “bom dia” com HBM", "Mesa flexora",
-    "Mesa flexora unilateral", "Cadeira flexora", "Cadeira flexora unilateral",
-    "Flexão de joelho em pé com caneleira", "Flexão de joelho em pé no cross", "Flexão de joelho em 3 apoios com caneleira",
-    "Agachamento sumô com HBC", "Agachamento sumô com HBM", "Extensão de quadril no solo caneleira",
-    "Extensão de quadril em pé caneleira", "Extensão de quadril e joelho no solo caneleira", "Extensão de quadril e joelho em pé caneleira",
-    "Extensão de quadril no cross", "Extensão de quadril em pé no cross", "Extensão de quadril e joelho no cross",
-    "Extensão de quadril e joelho em pé no cross", "Abdução de quadril em pé com caneleira", "Abdução de quadril decúbito lateral no solo caneleira"
+    "Abdução de quadril decúbito lateral no solo caneleira",
+    "Abdução de quadril em pé com caneleira",
+    "Agachamento sumô com HBC",
+    "Agachamento sumô com HBM",
+    "Cadeira flexora alternado",
+    "Cadeira flexora unilateral",
+    "Cadeira flexora",
+    "Elevação de quadril no banco reto com HBM",
+    "Elevação de Quadril no solo com anilha",
+    "Extensão de quadril e joelho em pé caneleira",
+    "Extensão de quadril e joelho em pé no cross",
+    "Extensão de quadril e joelho no cross",
+    "Extensão de quadril e joelho no solo caneleira",
+    "Extensão de quadril em pé caneleira",
+    "Extensão de quadril em pé no cross",
+    "Extensão de quadril no cross",
+    "Extensão de quadril no solo caneleira",
+    "Flexão de joelho em 3 apoios com caneleira",
+    "Flexão de joelho em pé com caneleira",
+    "Flexão de joelho em pé no cross",
+    "Levantamento terra com HBC",
+    "Levantamento terra com HBL",
+    "Levantamento terra com HBM",
+    "Levantamento terra no cross",
+    "Levantamento terra romeno com HBM",
+    "Mesa flexora alternado",
+    "Mesa flexora unilateral",
+    "Mesa flexora",
+    "Stiff com HBC simultâneo",
+    "Stiff com HBC unilateral",
+    "Stiff com HBM simultâneo",
+    "Stiff “bom dia” com HBM",
+    "Subida no step"
   ],
   "Panturrilha": [
-    "Cadeira solear", "Flexão plantar em pé na Máquina", "Flexão plantar no Leg press inclinado",
-    "Flexão plantar no leg press horizontal", "Flexão plantar em pé Unilateral", "Flexão plantar com Halteres."
+    "Cadeira solear",
+    "Flexão plantar com Halteres.",
+    "Flexão plantar em pé na Máquina",
+    "Flexão plantar em pé Unilateral",
+    "Flexão plantar no Leg press inclinado",
+    "Flexão plantar no leg press horizontal"
   ]
 };
 
@@ -140,10 +338,10 @@ const MUSCLE_GROUPS = Object.keys(EXERCISE_DATABASE);
 // --- STYLES FOR LOOP ANIMATION (Shared) ---
 const animationStyles = `
   @keyframes biomechanicalVideo {
-    0% { transform: scale(1) translateY(0); filter: brightness(1) contrast(1) saturate(1); }
-    40% { transform: scale(1.06) translateY(-8px); filter: brightness(1.15) contrast(1.1) saturate(1.2); }
-    60% { transform: scale(1.06) translateY(-8px); filter: brightness(1.15) contrast(1.1) saturate(1.2); }
-    100% { transform: scale(1) translateY(0); filter: brightness(1) contrast(1) saturate(1); }
+    0% { transform: scale(1) translateY(0); filter: brightness(1) contrast(1); }
+    40% { transform: scale(1.05) translateY(-5px); filter: brightness(1.1) contrast(1.1); }
+    60% { transform: scale(1.05) translateY(-5px); filter: brightness(1.1) contrast(1.1); }
+    100% { transform: scale(1) translateY(0); filter: brightness(1) contrast(1); }
   }
   .video-motion-engine { animation: biomechanicalVideo 5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
 `;
@@ -254,55 +452,19 @@ export function StudentManagement({ student, onBack, onNavigate }: { student: St
 export function CoachAssessmentView({ student, onBack, onSave }: { student: Student, onBack: () => void, onSave: (id: string, data: any) => void }) {
   const [formData, setFormData] = useState<Partial<PhysicalAssessment>>({
     data: new Date().toISOString().split('T')[0],
-    peso: '',
-    altura: '',
-    dc_peitoral: '',
-    dc_abdominal: '',
-    dc_coxa: '',
-    dc_tricipital: '',
-    dc_suprailiaca: '',
-    bio_percentual_gordura: '',
-    bio_massa_magra: '',
-    bio_musculo_esqueletico: '',
-    bio_massa_ossea: '',
-    bio_agua_corporal: '',
-    bio_gordura_visceral: '',
-    bio_idade_metabolica: '',
-    bio_tmb: '',
-    p_cintura: '',
-    p_quadril: '',
+    peso: '', altura: '', dc_peitoral: '', dc_abdominal: '', dc_coxa: '', dc_tricipital: '', dc_suprailiaca: '',
+    bio_percentual_gordura: '', bio_massa_magra: '', bio_musculo_esqueletico: '', bio_massa_ossea: '',
+    bio_agua_corporal: '', bio_gordura_visceral: '', bio_idade_metabolica: '', bio_tmb: '', p_cintura: '', p_quadril: '',
   });
 
   const handleSave = () => {
-    const assessment: PhysicalAssessment = {
-      id: Date.now().toString(),
-      ...formData,
-      peso: formData.peso || 0,
-      altura: formData.altura || 0,
-    } as PhysicalAssessment;
-
+    const assessment = { id: Date.now().toString(), ...formData, peso: formData.peso || 0, altura: formData.altura || 0 } as PhysicalAssessment;
     const currentAssessments = student.physicalAssessments || [];
-    const updatedAssessments = [assessment, ...currentAssessments];
-    
-    // Add Notification for student
-    const newNotification: AppNotification = {
-      id: Date.now().toString(),
-      type: 'ASSESSMENT',
-      message: `Nova Avaliação Física disponível. Data: ${new Date().toLocaleDateString('pt-BR')}`,
-      timestamp: Date.now(),
-      read: false
-    };
-    
-    onSave(student.id, { 
-      physicalAssessments: updatedAssessments, 
-      notifications: [newNotification, ...(student.notifications || [])] 
-    });
+    onSave(student.id, { physicalAssessments: [assessment, ...currentAssessments] });
     onBack();
   };
 
-  const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
+  const handleChange = (field: string, value: string) => setFormData(prev => ({ ...prev, [field]: value }));
 
   return (
     <div className="p-6 h-screen overflow-y-auto pb-48 text-white custom-scrollbar text-left">
@@ -310,113 +472,10 @@ export function CoachAssessmentView({ student, onBack, onSave }: { student: Stud
         <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white hover:bg-red-600 transition-colors"><ArrowLeft size={20}/></button>
         <h2 className="text-xl font-black italic uppercase tracking-tighter text-left">Avaliação: <span className="text-blue-500">{student.nome.split(' ')[0]}</span></h2>
       </header>
-
       <div className="space-y-6">
-        
-        {/* DATA */}
-        <Card className="p-6 bg-zinc-900 border-zinc-800">
-            <div className="space-y-2">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase">DATA</label>
-                <input type="date" value={formData.data} onChange={(e) => handleChange('data', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-blue-500"/>
-            </div>
-        </Card>
-
-        {/* DADOS BÁSICOS */}
-        <Card className="p-6 bg-zinc-900 border-zinc-800">
-            <h3 className="text-sm font-black uppercase text-blue-500 mb-4 tracking-widest flex items-center gap-2"><Scale size={16}/> Dados Básicos</h3>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Peso (kg)</label>
-                    <input type="number" value={formData.peso} onChange={(e) => handleChange('peso', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-blue-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Altura (cm)</label>
-                    <input type="number" value={formData.altura} onChange={(e) => handleChange('altura', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-blue-500"/>
-                </div>
-            </div>
-        </Card>
-
-        {/* DOBRAS CUTÂNEAS */}
-        <Card className="p-6 bg-zinc-900 border-zinc-800">
-            <h3 className="text-sm font-black uppercase text-blue-500 mb-4 tracking-widest flex items-center gap-2"><MousePointer2 size={16}/> Dobras Cutâneas (mm)</h3>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Coxa</label>
-                    <input type="number" value={formData.dc_coxa} onChange={(e) => handleChange('dc_coxa', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-blue-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Peitoral</label>
-                    <input type="number" value={formData.dc_peitoral} onChange={(e) => handleChange('dc_peitoral', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-blue-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Abdominal</label>
-                    <input type="number" value={formData.dc_abdominal} onChange={(e) => handleChange('dc_abdominal', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-blue-500"/>
-                </div>
-                {/* Keeping standard ones available if needed, though hidden in screenshot */}
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Tricipital (Opc.)</label>
-                    <input type="number" value={formData.dc_tricipital} onChange={(e) => handleChange('dc_tricipital', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-blue-500"/>
-                </div>
-            </div>
-        </Card>
-
-        {/* BIOIMPEDÂNCIA */}
-        <Card className="p-6 bg-zinc-900 border-zinc-800">
-            <h3 className="text-sm font-black uppercase text-emerald-500 mb-4 tracking-widest flex items-center gap-2"><Zap size={16}/> Bioimpedância Detalhada</h3>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Gordura Corp. (%)</label>
-                    <input type="number" value={formData.bio_percentual_gordura} onChange={(e) => handleChange('bio_percentual_gordura', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-emerald-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Massa Magra (kg)</label>
-                    <input type="number" value={formData.bio_massa_magra} onChange={(e) => handleChange('bio_massa_magra', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-emerald-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Músc. Esq. (kg)</label>
-                    <input type="number" value={formData.bio_musculo_esqueletico} onChange={(e) => handleChange('bio_musculo_esqueletico', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-emerald-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Massa Óssea (kg)</label>
-                    <input type="number" value={formData.bio_massa_ossea} onChange={(e) => handleChange('bio_massa_ossea', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-emerald-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Água Corp. (%)</label>
-                    <input type="number" value={formData.bio_agua_corporal} onChange={(e) => handleChange('bio_agua_corporal', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-emerald-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">G. Visceral</label>
-                    <input type="number" value={formData.bio_gordura_visceral} onChange={(e) => handleChange('bio_gordura_visceral', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-emerald-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Idade Metabólica</label>
-                    <input type="number" value={formData.bio_idade_metabolica} onChange={(e) => handleChange('bio_idade_metabolica', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-emerald-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">TMB (kcal)</label>
-                    <input type="number" value={formData.bio_tmb} onChange={(e) => handleChange('bio_tmb', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-emerald-500"/>
-                </div>
-            </div>
-        </Card>
-
-        {/* PERÍMETROS */}
-        <Card className="p-6 bg-zinc-900 border-zinc-800">
-            <h3 className="text-sm font-black uppercase text-orange-500 mb-4 tracking-widest flex items-center gap-2"><Ruler size={16}/> Perímetros (cm)</h3>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Cintura</label>
-                    <input type="number" value={formData.p_cintura} onChange={(e) => handleChange('p_cintura', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-orange-500"/>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Quadril</label>
-                    <input type="number" value={formData.p_quadril} onChange={(e) => handleChange('p_quadril', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-orange-500"/>
-                </div>
-            </div>
-        </Card>
-
-        <button onClick={handleSave} className="w-full py-5 bg-green-600 rounded-2xl font-black uppercase tracking-widest text-white shadow-lg shadow-green-900/20 active:scale-95 transition-all hover:bg-green-700 flex items-center justify-center gap-2 text-lg">
-            FINALIZAR AVALIAÇÃO
-        </button>
+        <Card className="p-6 bg-zinc-900 border-zinc-800"><div className="space-y-2"><label className="text-[10px] font-bold text-zinc-500 uppercase">DATA</label><input type="date" value={formData.data} onChange={(e) => handleChange('data', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-blue-500"/></div></Card>
+        <Card className="p-6 bg-zinc-900 border-zinc-800"><h3 className="text-sm font-black uppercase text-blue-500 mb-4 tracking-widest flex items-center gap-2"><Scale size={16}/> Dados Básicos</h3><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-bold text-zinc-500 uppercase">Peso (kg)</label><input type="number" value={formData.peso} onChange={(e) => handleChange('peso', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-blue-500"/></div><div className="space-y-2"><label className="text-[10px] font-bold text-zinc-500 uppercase">Altura (cm)</label><input type="number" value={formData.altura} onChange={(e) => handleChange('altura', e.target.value)} className="w-full bg-black border border-white/10 p-4 rounded-2xl text-white font-bold outline-none focus:border-blue-500"/></div></div></Card>
+        <button onClick={handleSave} className="w-full py-5 bg-green-600 rounded-2xl font-black uppercase tracking-widest text-white shadow-lg shadow-green-900/20 active:scale-95 transition-all hover:bg-green-700 flex items-center justify-center gap-2 text-lg">FINALIZAR AVALIAÇÃO</button>
       </div>
     </div>
   );
@@ -424,202 +483,49 @@ export function CoachAssessmentView({ student, onBack, onSave }: { student: Stud
 
 // --- PERIODIZATION GENERATOR ---
 export function PeriodizationView({ student, onBack, onProceedToWorkout }: { student: Student, onBack: () => void, onProceedToWorkout: () => void }) {
+  // ... (Periodization implementation unchanged, using generatePeriodizationPlan from gemini.ts)
   const [step, setStep] = useState<'avaliacao' | 'gerando' | 'painel'>('avaliacao');
-  const [formData, setFormData] = useState({
-    name: student.nome,
-    regularity: 'voltando',
-    goal: 'hipertrofia',
-    daysPerWeek: '4',
-    splitPreference: 'anterior_posterior',
-    type: 'STRENGTH' // STRENGTH is now the only option
-  });
+  const [formData, setFormData] = useState({ name: student.nome, regularity: 'voltando', goal: 'hipertrofia', daysPerWeek: '4', splitPreference: 'anterior_posterior', type: 'STRENGTH' });
   const [periodization, setPeriodization] = useState<any>(null);
 
   const handleGenerate = async () => {
     setStep('gerando');
     const result = await generatePeriodizationPlan(formData);
-    
     if (result) {
-      // SAVE TO FIRESTORE IMMEDIATELY
-      const pData: PeriodizationPlan = {
-        ...result,
-        id: Date.now().toString(),
-        startDate: new Date().toISOString(),
-        type: formData.type
-      };
-
+      const pData: PeriodizationPlan = { ...result, id: Date.now().toString(), startDate: new Date().toISOString(), type: formData.type };
       try {
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id);
-        // Save to specific field based on type
-        const updateData = formData.type === 'RUNNING' 
-          ? { runningPeriodization: pData } 
-          : { periodization: pData };
-        
+        const updateData = formData.type === 'RUNNING' ? { runningPeriodization: pData } : { periodization: pData };
         await setDoc(docRef, updateData, { merge: true });
-        
         setPeriodization(pData);
         setStep('painel');
-      } catch (e) {
-        console.error("Firebase Save Error:", e);
-        // Still show panel even if save fails visually
-        setPeriodization(pData);
-        setStep('painel');
-      }
-    } else {
-      setStep('avaliacao'); // On error
-      alert("Erro ao gerar periodização. Tente novamente.");
-    }
+      } catch (e) { console.error(e); setPeriodization(pData); setStep('painel'); }
+    } else { setStep('avaliacao'); alert("Erro ao gerar periodização."); }
   };
 
   return (
     <div className="p-6 h-screen overflow-y-auto pb-48 text-white custom-scrollbar text-left">
       <header className="flex items-center justify-between mb-8 text-left">
-         <div className="flex items-center gap-4">
-            <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white hover:bg-red-600 transition-colors"><ArrowLeft size={20}/></button>
-            <h2 className="text-xl font-black italic uppercase tracking-tighter text-left">Ciência<span className="text-red-600">Força</span></h2>
-         </div>
-         {step === 'painel' && (
-           <button onClick={() => setStep('avaliacao')} className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1 hover:text-white transition-colors">
-              <RotateCcw size={12}/> Reiniciar
-           </button>
-         )}
+         <div className="flex items-center gap-4"><button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white hover:bg-red-600 transition-colors"><ArrowLeft size={20}/></button><h2 className="text-xl font-black italic uppercase tracking-tighter text-left">Ciência<span className="text-red-600">Força</span></h2></div>
+         {step === 'painel' && (<button onClick={() => setStep('avaliacao')} className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1 hover:text-white transition-colors"><RotateCcw size={12}/> Reiniciar</button>)}
       </header>
-
       {step === 'avaliacao' && (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
            <Card className="p-8 mb-6 border-l-4 border-l-indigo-500">
-              <div className="flex items-center gap-4 mb-6">
-                 <div className="p-3 bg-indigo-500/20 text-indigo-500 rounded-2xl"><Brain size={24}/></div>
-                 <div>
-                    <h2 className="text-2xl font-black uppercase italic tracking-tighter">Anamnese Avançada</h2>
-                    <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Protocolo PBE • EEFD/UFRJ</p>
-                 </div>
-              </div>
-
+              <div className="flex items-center gap-4 mb-6"><div className="p-3 bg-indigo-500/20 text-indigo-500 rounded-2xl"><Brain size={24}/></div><div><h2 className="text-2xl font-black uppercase italic tracking-tighter">Anamnese Avançada</h2><p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Protocolo PBE • EEFD/UFRJ</p></div></div>
               <div className="space-y-6">
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Tipo de Periodização</label>
-                    <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-indigo-500 transition-colors">
-                       <option value="STRENGTH">Musculação / Força</option>
-                    </select>
-                 </div>
-
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Condição Biológica Atual</label>
-                    <select value={formData.regularity} onChange={e => setFormData({...formData, regularity: e.target.value})} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-indigo-500 transition-colors">
-                       <option value="sedentary">Iniciante / Sedentário</option>
-                       <option value="voltando">Retomada (Sem ritmo)</option>
-                       <option value="regular">Regular (Consistente)</option>
-                       <option value="stagnated">Estagnado (Platô)</option>
-                       <option value="performance">Alta Performance</option>
-                    </select>
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Dias/Semana</label>
-                       <input type="number" value={formData.daysPerWeek} onChange={e => setFormData({...formData, daysPerWeek: e.target.value})} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-indigo-500 transition-colors" />
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Objetivo</label>
-                       <select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-indigo-500 transition-colors">
-                          <option value="emagrecimento">Emagrecimento</option>
-                          <option value="hipertrofia">Hipertrofia</option>
-                          <option value="forca_pura">Força Pura</option>
-                       </select>
-                    </div>
-                 </div>
-
-                 {formData.type === 'STRENGTH' && (
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Estrutura de Divisão</label>
-                        <select value={formData.splitPreference} onChange={e => setFormData({...formData, splitPreference: e.target.value})} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-indigo-500 transition-colors">
-                        <option value="full_body">Full Body (Corpo Todo)</option>
-                        <option value="anterior_posterior">A/B: Anterior / Posterior</option>
-                        <option value="upper_lower">A/B: Superior / Inferior</option>
-                        <option value="abc_ppl">ABC: Push / Pull / Legs</option>
-                        <option value="abcd">ABCD (Intensidade Alta)</option>
-                        <option value="abcde">ABCDE (Volume por Músculo)</option>
-                        </select>
-                    </div>
-                 )}
+                 <div className="space-y-2"><label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Condição Biológica Atual</label><select value={formData.regularity} onChange={e => setFormData({...formData, regularity: e.target.value})} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-indigo-500 transition-colors"><option value="sedentary">Iniciante / Sedentário</option><option value="voltando">Retomada (Sem ritmo)</option><option value="regular">Regular (Consistente)</option><option value="stagnated">Estagnado (Platô)</option><option value="performance">Alta Performance</option></select></div>
+                 <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Dias/Semana</label><input type="number" value={formData.daysPerWeek} onChange={e => setFormData({...formData, daysPerWeek: e.target.value})} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-indigo-500 transition-colors" /></div><div className="space-y-2"><label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Objetivo</label><select value={formData.goal} onChange={e => setFormData({...formData, goal: e.target.value})} className="w-full p-4 bg-black border border-white/10 rounded-2xl text-sm font-bold text-white outline-none focus:border-indigo-500 transition-colors"><option value="emagrecimento">Emagrecimento</option><option value="hipertrofia">Hipertrofia</option><option value="forca_pura">Força Pura</option></select></div></div>
               </div>
-
-              <button onClick={handleGenerate} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-700 text-white py-5 rounded-[2rem] font-black uppercase tracking-widest shadow-lg shadow-indigo-900/20 active:scale-95 transition-all flex items-center justify-center gap-2">
-                 <Brain size={18}/> Gerar Planilha de Carga
-              </button>
+              <button onClick={handleGenerate} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-700 text-white py-5 rounded-[2rem] font-black uppercase tracking-widest shadow-lg shadow-indigo-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"><Brain size={18}/> Gerar Planilha de Carga</button>
            </Card>
         </div>
       )}
-
-      {step === 'gerando' && (
-         <div className="flex flex-col items-center justify-center py-20 space-y-6 animate-in fade-in">
-             <div className="relative">
-                <Loader2 size={64} className="text-indigo-600 animate-spin"/>
-                <Activity className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white" size={20} />
-             </div>
-             <p className="text-xs font-black uppercase tracking-[0.3em] text-zinc-500 animate-pulse">Analisando Biomecânica...</p>
-         </div>
-      )}
-
+      {step === 'gerando' && (<div className="flex flex-col items-center justify-center py-20 space-y-6 animate-in fade-in"><div className="relative"><Loader2 size={64} className="text-indigo-600 animate-spin"/><Activity className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white" size={20} /></div><p className="text-xs font-black uppercase tracking-[0.3em] text-zinc-500 animate-pulse">Analisando Biomecânica...</p></div>)}
       {step === 'painel' && periodization && (
          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8">
-            <Card className="p-6 bg-zinc-900 border-indigo-500/30 relative overflow-hidden">
-               <div className="absolute top-0 right-0 p-4 opacity-10"><Target size={120} className="text-indigo-500"/></div>
-               <div className="relative z-10">
-                  <div className="flex items-center gap-2 mb-2">
-                     <span className="bg-amber-500 text-black text-[9px] font-black px-2 py-0.5 rounded-md uppercase">Ciência da Força</span>
-                     <span className="text-zinc-500 text-[9px] font-bold uppercase tracking-widest">PBE • UFRJ</span>
-                  </div>
-                  <h1 className="text-3xl font-black italic uppercase leading-none mb-4">{periodization.titulo}</h1>
-                  <div className="flex flex-wrap gap-2 mb-6">
-                     <span className="bg-zinc-800 text-zinc-400 px-3 py-1 rounded-lg text-[10px] font-bold uppercase">Atleta: {student.nome}</span>
-                     <span className="bg-indigo-900/40 text-indigo-400 px-3 py-1 rounded-lg text-[10px] font-bold uppercase">Ritmo: {formData.regularity}</span>
-                     <span className="bg-indigo-900/40 text-indigo-400 px-3 py-1 rounded-lg text-[10px] font-bold uppercase">Tipo: {formData.type}</span>
-                  </div>
-                  <button onClick={onProceedToWorkout} className="bg-red-600 hover:bg-red-700 text-white w-full py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-red-900/20 active:scale-95 transition-all">
-                     <Edit3 size={16}/> Configurar Treinos (Exercícios)
-                  </button>
-               </div>
-            </Card>
-
-            <div className="grid grid-cols-2 gap-3">
-               {periodization.microciclos.map((m: any, i: number) => (
-                  <div key={i} className={`p-4 rounded-2xl border transition-all ${i === 3 ? 'bg-emerald-900/20 border-emerald-500/50' : 'bg-zinc-900 border-zinc-800'}`}>
-                     <div className="flex justify-between items-start mb-2">
-                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${i === 3 ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-500'}`}>Semana {m.semana}</span>
-                        <TrendingUp size={14} className={i === 3 ? "text-emerald-500" : "text-zinc-600"} />
-                     </div>
-                     <h3 className="font-black text-sm mb-3 uppercase leading-tight text-white">{m.foco}</h3>
-                     <div className="space-y-1">
-                        <div className="flex items-center gap-1 text-[9px] font-bold text-zinc-400">
-                           <Flame size={10} className={i === 3 ? "text-amber-400" : "text-zinc-600"}/> PSE: {m.pse_alvo}
-                        </div>
-                        <div className="flex items-center gap-1 text-[9px] font-bold text-zinc-400">
-                           <Activity size={10} className={i === 3 ? "text-white" : "text-zinc-600"}/> REPS: {m.faixa_repeticoes}
-                        </div>
-                     </div>
-                  </div>
-               ))}
-            </div>
-
-            <Card className="p-0 overflow-hidden bg-zinc-900">
-               <div className="bg-indigo-600 p-6 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                     <div className="bg-white/20 p-2 rounded-xl"><BookOpen size={18} className="text-white"/></div>
-                     <h3 className="text-lg font-black uppercase tracking-tighter">Planilha Detalhada</h3>
-                  </div>
-               </div>
-               <div className="p-6">
-                  <div className="bg-black p-6 rounded-2xl text-zinc-300 font-mono text-xs leading-relaxed border border-white/5 whitespace-pre-line">
-                     {periodization.detalhes_treino}
-                  </div>
-                  <div className="mt-4 p-4 bg-zinc-800/50 rounded-xl border border-white/5">
-                     <h4 className="text-[10px] font-black uppercase text-indigo-400 mb-2 flex items-center gap-2"><ListFilter size={12}/> Volume Prescrito:</h4>
-                     <p className="text-xs text-zinc-300 font-medium">{periodization.volume_por_grupo}</p>
-                  </div>
-               </div>
-            </Card>
+            <Card className="p-6 bg-zinc-900 border-indigo-500/30 relative overflow-hidden"><div className="absolute top-0 right-0 p-4 opacity-10"><Target size={120} className="text-indigo-500"/></div><div className="relative z-10"><div className="flex items-center gap-2 mb-2"><span className="bg-amber-500 text-black text-[9px] font-black px-2 py-0.5 rounded-md uppercase">Ciência da Força</span><span className="text-zinc-500 text-[9px] font-bold uppercase tracking-widest">PBE • UFRJ</span></div><h1 className="text-3xl font-black italic uppercase leading-none mb-4">{periodization.titulo}</h1><button onClick={onProceedToWorkout} className="bg-red-600 hover:bg-red-700 text-white w-full py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-red-900/20 active:scale-95 transition-all"><Edit3 size={16}/> Configurar Treinos (Exercícios)</button></div></Card>
+            <div className="grid grid-cols-2 gap-3">{periodization.microciclos.map((m: any, i: number) => (<div key={i} className={`p-4 rounded-2xl border transition-all ${i === 3 ? 'bg-emerald-900/20 border-emerald-500/50' : 'bg-zinc-900 border-zinc-800'}`}><div className="flex justify-between items-start mb-2"><span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${i === 3 ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-500'}`}>Semana {m.semana}</span><TrendingUp size={14} className={i === 3 ? "text-emerald-500" : "text-zinc-600"} /></div><h3 className="font-black text-sm mb-3 uppercase leading-tight text-white">{m.foco}</h3><div className="space-y-1"><div className="flex items-center gap-1 text-[9px] font-bold text-zinc-400"><Flame size={10} className={i === 3 ? "text-amber-400" : "text-zinc-600"}/> PSE: {m.pse_alvo}</div><div className="flex items-center gap-1 text-[9px] font-bold text-zinc-400"><Activity size={10} className={i === 3 ? "text-white" : "text-zinc-600"}/> REPS: {m.faixa_repeticoes}</div></div></div>))}</div>
          </div>
       )}
       <EliteFooter />
@@ -629,69 +535,59 @@ export function PeriodizationView({ student, onBack, onProceedToWorkout }: { stu
 
 // --- WORKOUT EDITOR ---
 export function WorkoutEditorView({ student, onBack, onSave }: { student: Student, onBack: () => void, onSave: (id: string, data: any) => void }) {
-  // Local state to manage list of workouts being edited
   const [allWorkouts, setAllWorkouts] = useState<Workout[]>(student.workouts || []);
   const [currentWorkoutId, setCurrentWorkoutId] = useState<string | null>(student.workouts?.[0]?.id || null);
   const [workoutTitle, setWorkoutTitle] = useState(student.workouts?.[0]?.title || "Treino A");
   
-  // Schedule State
   const [startDate, setStartDate] = useState(student.workouts?.[0]?.startDate || new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(student.workouts?.[0]?.endDate || "");
   const [frequency, setFrequency] = useState<number>(student.workouts?.[0]?.frequencyWeekly || 3);
 
   const [selectedMuscle, setSelectedMuscle] = useState("");
-  const [exerciseOptions, setExerciseOptions] = useState<Exercise[]>([]); 
-  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [exerciseOptions, setExerciseOptions] = useState<string[]>([]);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
+  
   const [exerciseImage, setExerciseImage] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
+  const [bioInsight, setBioInsight] = useState<string>("");
+  const [technicalCue, setTechnicalCue] = useState<string>("");
+  const [isGeneratingCue, setIsGeneratingCue] = useState(false);
   
-  // Current exercises for the workout being edited
   const [currentWorkoutExercises, setCurrentWorkoutExercises] = useState<Exercise[]>(student.workouts?.[0]?.exercises || []);
-
-  // Exercise config state (for adding new ones)
   const [exConfig, setExConfig] = useState({ sets: '3', reps: '10-12', rest: '60' });
 
-  // UPDATE: Load exercises from STATIC database instead of Gemini
+  // Generate Bio-Insight on mount
+  useEffect(() => {
+    generateBioInsight(student).then(setBioInsight);
+  }, [student]);
+
   useEffect(() => {
     if (selectedMuscle) {
-      setLoadingOptions(true);
-      const list = EXERCISE_DATABASE[selectedMuscle] || [];
-      const formattedList = list.map(name => ({
-        name: name,
-        description: "Exercício Padrão Elite",
-        benefits: ""
-      }));
-      setExerciseOptions(formattedList);
-      setLoadingOptions(false);
+      setExerciseOptions(EXERCISE_DATABASE[selectedMuscle] || []);
     } else {
       setExerciseOptions([]);
     }
   }, [selectedMuscle]);
 
-  // Calculate Projected Sessions when dates change
-  const projectedSessions = useMemo(() => {
-    if (!startDate || !endDate) return 10; // Default
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-    const weeks = diffDays / 7;
-    
-    // Rough logic based on frequency. If frequency is weekly:
-    // This implies this specific Workout (e.g. A) is done 'frequency' times? 
-    // Usually Frequency is Total. Let's assume Frequency is for THIS workout for now for simplicity, 
-    // or calculate based on total split.
-    // If user inputs "3x week" for "Treino A", it means 3*weeks.
-    return Math.round(weeks * frequency);
-  }, [startDate, endDate, frequency]);
-
-  const generateImg = async (exName: string) => {
-    setImageLoading(true); 
+  const processExerciseSelection = async (exName: string) => {
+    setImageLoading(true);
     setExerciseImage(null);
-    const imgUrl = await generateExerciseImage(exName);
-    setExerciseImage(imgUrl);
-    setImageLoading(false);
+    setTechnicalCue("");
+    setSelectedExercise({ name: exName, description: "Aguarde análise biomecânica...", benefits: "" });
+
+    try {
+        const analysis = await analyzeExerciseBiomechanics(exName);
+        if (analysis) {
+            setSelectedExercise({ name: exName, description: analysis.description, benefits: analysis.benefits });
+            const img = await generateExerciseImage(exName, analysis.visualPrompt);
+            setExerciseImage(img);
+            generateTechnicalCue(exName).then(setTechnicalCue);
+        }
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setImageLoading(false);
+    }
   };
 
   const addExercise = () => {
@@ -708,13 +604,7 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
       }
     ]);
     setSelectedExercise(null);
-  };
-
-  // Helper to update exercises in the list
-  const updateExercise = (id: string, field: string, value: string) => {
-    setCurrentWorkoutExercises(prev => prev.map(ex => 
-        ex.id === id ? { ...ex, [field]: value } : ex
-    ));
+    setExerciseImage(null);
   };
 
   const handleSaveWorkout = () => {
@@ -725,7 +615,7 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
         startDate,
         endDate,
         frequencyWeekly: frequency,
-        projectedSessions
+        projectedSessions: Math.round(frequency * 4) // Approx
     };
 
     let updatedWorkouts = [...allWorkouts];
@@ -738,14 +628,12 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
     }
 
     setAllWorkouts(updatedWorkouts);
-    setCurrentWorkoutId(newWorkout.id); // Stay on this workout
+    setCurrentWorkoutId(newWorkout.id);
 
-    // Save to Firebase
-    // Add Notification
     const notif: AppNotification = {
       id: Date.now().toString(),
       type: 'WORKOUT',
-      message: `Novo Treino "${workoutTitle}" prescrito! Válido até ${new Date(endDate).toLocaleDateString('pt-BR')}`,
+      message: `Novo Treino "${workoutTitle}" prescrito!`,
       timestamp: Date.now(),
       read: false
     };
@@ -754,197 +642,153 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
       workouts: updatedWorkouts,
       notifications: [notif, ...(student.notifications || [])]
     });
-    
-    alert("Treino salvo e notificação enviada ao aluno!");
+    alert("Treino salvo!");
   };
 
   const handleNewWorkout = () => {
     setWorkoutTitle("Novo Treino");
     setCurrentWorkoutExercises([]);
     setCurrentWorkoutId(null);
-    setStartDate(new Date().toISOString().split('T')[0]);
-    setEndDate("");
   };
 
   return (
-    <div className="p-6 h-screen overflow-y-auto pb-48 text-white custom-scrollbar text-left">
+    <div className="min-h-screen bg-black text-white font-sans selection:bg-amber-500/30 overflow-x-hidden p-6 pb-48">
       <style>{animationStyles}</style>
-      <header className="flex items-center justify-between mb-10 text-left">
+      
+      <header className="flex items-center justify-between mb-10 text-left sticky top-0 z-50 bg-black/90 backdrop-blur-md py-4 border-b border-white/5">
         <div className="flex items-center gap-4 text-left">
           <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white hover:bg-red-600 transition-colors"><ArrowLeft size={20}/></button>
-          <h2 className="text-xl font-black italic uppercase text-left">Prescreve <span className="text-red-600">AI</span></h2>
+          <div className="flex items-center gap-3">
+            <div className="bg-amber-500 p-1.5 rounded-lg rotate-3 shadow-lg shadow-amber-500/20"><Video className="w-5 h-5 text-black" /></div>
+            <h2 className="text-xl font-black italic uppercase text-left">Prescreve <span className="text-amber-500">AI</span></h2>
+          </div>
         </div>
         <div className="flex gap-2">
-            <button onClick={handleNewWorkout} className="bg-zinc-800 px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all flex items-center gap-2">
-               <FilePlus size={14}/> Novo
-            </button>
-            <button onClick={onBack} className="bg-green-600 px-6 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg text-white hover:bg-green-700 transition-all flex items-center gap-2">
-               <Check size={14}/> Concluir
-            </button>
+            <button onClick={handleNewWorkout} className="bg-zinc-800 px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all flex items-center gap-2"><FilePlus size={14}/> Novo</button>
+            <button onClick={onBack} className="bg-green-600 px-6 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg text-white hover:bg-green-700 transition-all flex items-center gap-2"><Check size={14}/> Concluir</button>
         </div>
       </header>
 
-      {/* Workout Naming Section */}
+      {/* Workout Metadata */}
       <div className="mb-8">
-         <Card className="p-6 bg-zinc-900 border-red-600/30">
+         <Card className="p-6 bg-zinc-900 border-amber-500/20">
             <div className="flex flex-col gap-4">
               <div>
-                <label className="text-[10px] font-black uppercase text-red-500 mb-2 block tracking-widest">Identificação do Treino</label>
-                <div className="flex items-center gap-3">
-                   <Layout className="text-zinc-500"/>
-                   <input 
-                     type="text" 
-                     value={workoutTitle} 
-                     onChange={(e) => setWorkoutTitle(e.target.value)} 
-                     className="bg-transparent border-b-2 border-zinc-700 w-full text-2xl font-black uppercase italic text-white focus:border-red-600 outline-none placeholder:text-zinc-700"
-                     placeholder="EX: TREINO A - PEITO E TRÍCEPS"
-                   />
-                </div>
+                <label className="text-[10px] font-black uppercase text-amber-500 mb-2 block tracking-widest">Identificação do Treino</label>
+                <div className="flex items-center gap-3"><Layout className="text-zinc-500"/><input type="text" value={workoutTitle} onChange={(e) => setWorkoutTitle(e.target.value)} className="bg-transparent border-b-2 border-zinc-700 w-full text-2xl font-black uppercase italic text-white focus:border-amber-500 outline-none placeholder:text-zinc-700" placeholder="EX: TREINO A"/></div>
               </div>
-
-              {/* SCHEDULE INPUTS */}
               <div className="grid grid-cols-3 gap-4 border-t border-white/5 pt-4">
-                 <div>
-                    <label className="text-[9px] font-bold uppercase text-zinc-500 mb-1 block">Início</label>
-                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-black border border-white/10 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-red-600" />
-                 </div>
-                 <div>
-                    <label className="text-[9px] font-bold uppercase text-zinc-500 mb-1 block">Renovação (Fim)</label>
-                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-black border border-white/10 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-red-600" />
-                 </div>
-                 <div>
-                    <label className="text-[9px] font-bold uppercase text-zinc-500 mb-1 block">Freq. Semanal (Deste Treino)</label>
-                    <input type="number" value={frequency} onChange={e => setFrequency(Number(e.target.value))} className="w-full bg-black border border-white/10 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-red-600" placeholder="Ex: 2" />
-                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black uppercase text-zinc-500">Total Projetado:</span>
-                  <span className="text-red-500 font-black">{projectedSessions} Sessões</span>
+                 <div><label className="text-[9px] font-bold uppercase text-zinc-500 mb-1 block">Início</label><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-black border border-white/10 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-amber-500" /></div>
+                 <div><label className="text-[9px] font-bold uppercase text-zinc-500 mb-1 block">Fim</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-black border border-white/10 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-amber-500" /></div>
+                 <div><label className="text-[9px] font-bold uppercase text-zinc-500 mb-1 block">Freq.</label><input type="number" value={frequency} onChange={e => setFrequency(Number(e.target.value))} className="w-full bg-black border border-white/10 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-amber-500" /></div>
               </div>
             </div>
          </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-white">
-        <aside className="lg:col-span-4 space-y-6 text-white text-left">
-          <div className="bg-zinc-900 p-6 rounded-[2.5rem] border border-white/5 text-left text-white">
-             <label className="text-[10px] font-black uppercase text-zinc-500 mb-4 block text-left">Músculo Alvo</label>
-             <select className="w-full bg-black border border-white/10 rounded-2xl p-4 text-sm text-white font-bold" onChange={e => setSelectedMuscle(e.target.value)}>
-                <option value="">Selecione...</option>
+        {/* Left Sidebar */}
+        <aside className="lg:col-span-4 space-y-6">
+          {bioInsight && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-[2rem] p-6 shadow-xl animate-in slide-in-from-left-4">
+              <div className="flex items-center gap-2 mb-4"><Sparkles className="w-4 h-4 text-amber-500" /><span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500">Bio-Insight ✨</span></div>
+              <div className="text-[11px] text-neutral-300 leading-relaxed italic whitespace-pre-wrap">{bioInsight}</div>
+            </div>
+          )}
+
+          <div className="bg-zinc-900 p-6 rounded-[2.5rem] border border-white/5 shadow-2xl">
+             <label className="text-[10px] font-black uppercase text-zinc-500 mb-4 block">Inventário Prescrito</label>
+             <select className="w-full bg-black border border-white/10 rounded-2xl p-4 text-sm text-white font-bold mb-4 focus:border-amber-500 outline-none" onChange={e => setSelectedMuscle(e.target.value)}>
+                <option value="">Grupo Muscular...</option>
                 {Object.keys(EXERCISE_DATABASE).map(m => <option key={`sel-muscle-${m}`} value={m}>{m}</option>)}
              </select>
-             <div className="mt-6 space-y-2 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar text-left">
-                {loadingOptions ? <Loader2 className="animate-spin mx-auto text-red-600" /> : exerciseOptions.map((ex, i) => (
-                  <button key={`opt-ex-edit-${i}`} onClick={() => { setSelectedExercise(ex); generateImg(ex.name); }} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase border transition-all flex items-center justify-between ${selectedExercise?.name === ex.name ? 'bg-red-600 border-red-600 text-white' : 'bg-black border-white/5 text-zinc-500 hover:bg-zinc-800'}`}>
-                    {ex.name} <Play size={10} fill="currentColor"/>
+             <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                {exerciseOptions.map((ex, i) => (
+                  <button key={`opt-ex-${i}`} onClick={() => processExerciseSelection(ex)} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase border transition-all flex items-center justify-between ${selectedExercise?.name === ex ? 'bg-amber-500 border-amber-500 text-black' : 'bg-black border-white/5 text-zinc-500 hover:bg-zinc-800'}`}>
+                    <span className="truncate">{ex}</span> <Play size={10} fill="currentColor"/>
                   </button>
                 ))}
              </div>
           </div>
+
           {currentWorkoutExercises.length > 0 && (
-             <div className="bg-zinc-900 p-6 rounded-[2.5rem] space-y-3 text-left">
-                <h3 className="text-[10px] font-black text-red-600 uppercase tracking-widest text-left">Sequência: {workoutTitle}</h3>
+             <div className="bg-zinc-900 p-6 rounded-[2.5rem] space-y-3">
+                <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Sequência Atual</h3>
                 {currentWorkoutExercises.map((ex, i) => (
-                  <div key={`seq-edit-${ex.id}-${i}`} className="flex flex-col gap-2 p-3 bg-black rounded-xl border border-white/5 text-white text-left shadow-inner">
-                     <div className="flex items-center gap-3">
-                        {/* Ordinal Number */}
-                        <div className="w-6 h-6 rounded-full bg-red-600 flex items-center justify-center shrink-0">
-                           <span className="text-[10px] font-black text-white">{i + 1}º</span>
-                        </div>
-                        <div className="w-8 h-8 rounded-lg bg-zinc-800 overflow-hidden shrink-0">
-                          <img src={ex.thumb || ""} className="w-full h-full object-cover" alt=""/>
-                        </div>
-                        <span className="text-[9px] font-black uppercase truncate flex-1">{ex.name}</span>
-                        <button onClick={() => setCurrentWorkoutExercises(currentWorkoutExercises.filter(x => x.id !== ex.id))}><Trash2 size={12} className="text-red-600"/></button>
-                     </div>
-                     <div className="grid grid-cols-3 gap-2">
-                        <div className="flex flex-col">
-                           <label className="text-[6px] uppercase font-bold text-zinc-500">Séries</label>
-                           <input 
-                              type="text" 
-                              value={ex.sets || ''} 
-                              onChange={(e) => ex.id && updateExercise(ex.id, 'sets', e.target.value)}
-                              className="bg-zinc-900 border border-white/5 p-1 rounded text-[10px] text-center text-white" 
-                           />
-                        </div>
-                        <div className="flex flex-col">
-                           <label className="text-[6px] uppercase font-bold text-zinc-500">Reps</label>
-                           <input 
-                              type="text" 
-                              value={ex.reps || ''} 
-                              onChange={(e) => ex.id && updateExercise(ex.id, 'reps', e.target.value)}
-                              className="bg-zinc-900 border border-white/5 p-1 rounded text-[10px] text-center text-white" 
-                           />
-                        </div>
-                        <div className="flex flex-col">
-                           <label className="text-[6px] uppercase font-bold text-zinc-500">Rec(s)</label>
-                           <input 
-                              type="text" 
-                              value={ex.rest || ''} 
-                              onChange={(e) => ex.id && updateExercise(ex.id, 'rest', e.target.value)}
-                              className="bg-zinc-900 border border-white/5 p-1 rounded text-[10px] text-center text-white" 
-                           />
-                        </div>
-                     </div>
+                  <div key={`seq-edit-${i}`} className="flex items-center gap-3 p-3 bg-black rounded-xl border border-white/5 text-white">
+                     <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center shrink-0"><span className="text-[10px] font-black text-black">{i + 1}</span></div>
+                     <span className="text-[9px] font-black uppercase truncate flex-1">{ex.name}</span>
+                     <button onClick={() => setCurrentWorkoutExercises(currentWorkoutExercises.filter((_, idx) => idx !== i))}><Trash2 size={12} className="text-red-600"/></button>
                   </div>
                 ))}
-                
-                {/* SAVE BUTTON FOR THE LIST */}
-                <button onClick={handleSaveWorkout} className="w-full mt-4 py-4 bg-blue-600 rounded-2xl font-black uppercase tracking-widest text-white shadow-lg shadow-blue-900/20 active:scale-95 transition-all hover:bg-blue-700 flex items-center justify-center gap-2">
-                    <Save size={16}/> Salvar Prescrição & Notificar
-                </button>
+                <button onClick={handleSaveWorkout} className="w-full mt-4 py-4 bg-blue-600 rounded-2xl font-black uppercase tracking-widest text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Save size={16}/> Salvar Treino</button>
              </div>
           )}
         </aside>
 
-        <section className="lg:col-span-8 text-white">
-           {selectedExercise ? (
-             <Card className="bg-zinc-900/50 border-white/10 shadow-2xl text-white">
-                <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden group">
-                   {imageLoading ? (
-                       <div className="text-center text-white">
-                           <Loader2 className="animate-spin text-red-600 mb-4" />
-                           <span className="text-[10px] font-black uppercase tracking-widest text-white text-center">A carregar...</span>
-                       </div>
-                   ) : (
-                       <>
-                           <div className="w-full h-full relative video-motion-engine">
-                               <img src={exerciseImage || ""} className="w-full h-full object-cover" alt={selectedExercise.name}/>
+        {/* Main Content (Right) */}
+        <section className="lg:col-span-8">
+           {!selectedExercise ? (
+             <div className="h-full min-h-[500px] flex flex-col items-center justify-center text-zinc-600 border-2 border-dashed border-white/5 rounded-[3rem] bg-zinc-900/20">
+                <Video className="w-16 h-16 opacity-10 mb-6" />
+                <p className="font-black uppercase tracking-[0.4em] text-[10px] text-amber-500 text-center px-8">Selecione um exercício para ver a biomecânica 8K analisada por IA</p>
+             </div>
+           ) : (
+             <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
+               <div className="bg-zinc-900/80 rounded-[3rem] overflow-hidden border border-white/10 shadow-2xl backdrop-blur-xl">
+                  {/* Video/Image Player */}
+                  <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden border-b border-white/5 group">
+                     {imageLoading ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-20">
+                           <Loader2 className="w-12 h-12 animate-spin text-amber-500" />
+                           <span className="text-[10px] font-black uppercase tracking-[0.5em] text-neutral-500 mt-4">Analisando Biomecânica...</span>
+                        </div>
+                     ) : exerciseImage ? (
+                        <div className="w-full h-full relative video-motion-engine">
+                           <img src={exerciseImage} alt={selectedExercise.name} className="w-full h-full object-cover" />
+                           <div className="absolute top-8 left-8 flex items-center gap-3">
+                              <div className="bg-red-600 h-2 w-2 rounded-full animate-pulse shadow-lg shadow-red-500/50"></div>
+                              <span className="text-[10px] font-black uppercase tracking-widest bg-black/60 px-2 py-1 rounded border border-white/10 backdrop-blur-md">LIVE BIOMECHANIC FEED</span>
                            </div>
-                           <button 
-                             onClick={() => generateImg(selectedExercise.name)} 
-                             className="absolute top-4 right-4 bg-black/60 hover:bg-red-600 p-2 rounded-full text-white backdrop-blur-md transition-all opacity-0 group-hover:opacity-100"
-                             title="Regenerar Imagem"
-                           >
-                              <RefreshCcw size={16} />
-                           </button>
-                       </>
-                   )}
-                </div>
-                <div className="p-10 text-white text-left">
-                   <h2 className="text-4xl font-black uppercase italic tracking-tighter text-left">{selectedExercise.name}</h2>
-                   <p className="text-sm text-zinc-400 mt-4 leading-relaxed italic text-left">"{selectedExercise.description}"</p>
-                   
-                   {/* Editor Controls for Adding */}
-                   <div className="grid grid-cols-3 gap-4 mt-6">
-                      <div className="space-y-1">
-                         <label className="text-[9px] font-black uppercase text-zinc-500">Séries</label>
-                         <input type="text" value={exConfig.sets} onChange={e => setExConfig({...exConfig, sets: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl p-3 text-sm font-bold text-white text-center"/>
-                      </div>
-                      <div className="space-y-1">
-                         <label className="text-[9px] font-black uppercase text-zinc-500">Repetições</label>
-                         <input type="text" value={exConfig.reps} onChange={e => setExConfig({...exConfig, reps: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl p-3 text-sm font-bold text-white text-center"/>
-                      </div>
-                      <div className="space-y-1">
-                         <label className="text-[9px] font-black uppercase text-zinc-500">Descanso (s)</label>
-                         <input type="text" value={exConfig.rest} onChange={e => setExConfig({...exConfig, rest: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl p-3 text-sm font-bold text-white text-center"/>
-                      </div>
-                   </div>
+                        </div>
+                     ) : <Activity className="text-zinc-700 w-24 h-24"/>}
+                  </div>
 
-                   <button onClick={addExercise} className="w-full mt-8 py-5 bg-red-600 rounded-3xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all text-white hover:bg-red-700">Adicionar ao Treino</button>
-                </div>
-             </Card>
-           ) : <div className="h-full min-h-[400px] border-2 border-dashed border-white/5 rounded-[3rem] flex flex-col items-center justify-center opacity-20 text-center"><Video size={48} className="mb-4"/><p className="text-[10px] font-black uppercase text-white">Laboratório PhD ABFIT</p></div>}
+                  <div className="p-10">
+                     <div className="flex justify-between items-start mb-8">
+                        <h2 className="text-4xl font-black uppercase italic tracking-tighter text-white leading-none max-w-lg">{selectedExercise.name}</h2>
+                        {technicalCue && (
+                           <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl max-w-xs">
+                              <div className="flex items-center gap-2 mb-2"><Zap className="w-3 h-3 text-amber-500 fill-amber-500"/><span className="text-[9px] font-black uppercase tracking-[0.3em] text-amber-500">Dica IA</span></div>
+                              <p className="text-xs text-zinc-300 italic leading-relaxed">"{technicalCue}"</p>
+                           </div>
+                        )}
+                     </div>
+
+                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                        <div className="space-y-4">
+                           <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-500 flex items-center gap-2"><ZapIcon className="w-4 h-4 fill-amber-500" /> Técnica Aplicada</h4>
+                           <p className="text-zinc-400 text-sm leading-relaxed border-l-2 border-amber-500/20 pl-4">{selectedExercise.description}</p>
+                        </div>
+                        <div className="bg-black/40 p-6 rounded-[2rem] border border-white/5">
+                           <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-4">Impacto Fisiológico</h4>
+                           <p className="text-zinc-400 text-xs italic whitespace-pre-wrap">{selectedExercise.benefits}</p>
+                        </div>
+                     </div>
+
+                     {/* Add to Workout Controls */}
+                     <div className="bg-zinc-800/50 p-6 rounded-[2rem] border border-white/10">
+                        <div className="grid grid-cols-3 gap-4 mb-4">
+                           <div className="space-y-1"><label className="text-[9px] font-black uppercase text-zinc-500">Séries</label><input type="text" value={exConfig.sets} onChange={e => setExConfig({...exConfig, sets: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl p-3 text-sm font-bold text-white text-center"/></div>
+                           <div className="space-y-1"><label className="text-[9px] font-black uppercase text-zinc-500">Reps</label><input type="text" value={exConfig.reps} onChange={e => setExConfig({...exConfig, reps: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl p-3 text-sm font-bold text-white text-center"/></div>
+                           <div className="space-y-1"><label className="text-[9px] font-black uppercase text-zinc-500">Desc(s)</label><input type="text" value={exConfig.rest} onChange={e => setExConfig({...exConfig, rest: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl p-3 text-sm font-bold text-white text-center"/></div>
+                        </div>
+                        <button onClick={addExercise} className="w-full py-4 bg-amber-500 rounded-2xl font-black uppercase tracking-widest text-black shadow-lg shadow-amber-500/20 active:scale-95 transition-all hover:bg-amber-400">Adicionar ao Treino</button>
+                     </div>
+                  </div>
+               </div>
+             </div>
+           )}
         </section>
       </div>
     </div>
@@ -954,7 +798,7 @@ export function WorkoutEditorView({ student, onBack, onSave }: { student: Studen
 // --- RUNNING WORKOUT MANAGER ---
 export function RunningWorkoutManager({ student, onBack, onSave }: { student: Student, onBack: () => void, onSave: (id: string, data: any) => void }) {
   return (
-    <div className="h-screen overflow-y-auto bg-slate-950">
+    <div className="h-screen overflow-y-auto bg-black custom-scrollbar">
         <RunTrackCoachView student={student} onBack={onBack} />
     </div>
   );

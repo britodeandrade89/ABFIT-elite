@@ -57,37 +57,80 @@ export async function callGemini(prompt: string, systemInstruction: string = "",
   }
 }
 
-export async function generateExerciseImage(exerciseName: string): Promise<string | null> {
+export async function generateBioInsight(student: any): Promise<string> {
+  if (!apiKey) return "";
+  const prompt = `Analise este perfil de aluno e forneça 3 orientações curtas e cruciais para o treinador. 
+    Aluno: ${student.nome}, Idade: ${student.age || 'N/A'}, Objetivo: ${student.goal || 'Geral'}.
+    Histórico: ${student.injuryHistory || 'Nenhum'}.
+    Foque em: Segurança Biomecânica, Estratégia de Foco e Gestão de Energia.`;
+  
+  return await callGemini(prompt, "Você é um Fisiologista Sênior.");
+}
+
+export async function generateTechnicalCue(exerciseName: string, studentInfo: string = ""): Promise<string> {
+  if (!apiKey) return "";
+  const prompt = `Forneça uma dica técnica de "ouro" para o exercício "${exerciseName}". 
+    ${studentInfo ? `Considere: ${studentInfo}.` : ''} 
+    Seja breve, prático e focado na biomecânica.`;
+  
+  return await callGemini(prompt, "Você é um Treinador Biomecânico de Elite.");
+}
+
+export async function analyzeExerciseBiomechanics(exerciseName: string): Promise<any> {
+  if (!apiKey) return null;
+  const prompt = `Analise o exercício "${exerciseName}". 
+      Instruções obrigatórias:
+      - Se o nome contém "HBC", o equipamento deve ser obrigatoriamente um Haltere (Dumbbell). Nunca use barras se o nome diz HBC.
+      - Se o nome contém "HBL", use obrigatoriamente Barra Longa.
+      - Se o nome contém "alternado", descreva uma execução onde um membro está em cima (contração máxima) e o outro embaixo (início).
+      - Se o nome contém "sumô", descreva a postura de pernas bem afastadas e pés para fora.
+      - Se o nome contém "frontal", descreva a barra sobre os ombros (front rack).
+      
+      Forneça:
+      1. Descrição técnica da execução perfeita em português.
+      2. 3 Benefícios principais em português.
+      3. Um PROMPT VISUAL DETALHADO em INGLÊS para gerar uma foto 8k. O prompt deve descrever: O atleta preto musculoso, a posição exata do equipamento, a biomecânica asimétrica (se alternado), a iluminação de ginásio moderno de luxo.
+      
+      Responda APENAS em JSON: {"description": "", "benefits": "", "visualPrompt": ""}`;
+
+  return await callGemini(prompt, "Você é um Especialista em Biomecânica.", true);
+}
+
+export async function generateExerciseImage(exerciseName: string, customPrompt?: string): Promise<string | null> {
   if (!apiKey) return null;
   
-  let biomechanicalRefinement = "Ensuring perfect biomechanics.";
-  const nameLower = exerciseName.toLowerCase();
+  let prompt = customPrompt;
 
-  if (nameLower.includes("banco 75")) biomechanicalRefinement += " The bench is at a high incline of 75 degrees (almost vertical).";
-  if (nameLower.includes("banco 45")) biomechanicalRefinement += " The bench is at a standard incline of 45 degrees.";
-  if (nameLower.includes("banco declinado")) biomechanicalRefinement += " The bench is declined, head lower than hips.";
+  if (!prompt) {
+      let biomechanicalRefinement = "Ensuring perfect biomechanics.";
+      const nameLower = exerciseName.toLowerCase();
 
-  if (nameLower.includes("alternado")) biomechanicalRefinement += " The athlete is performing the movement alternating arms (one up, one down).";
-  if (nameLower.includes("unilateral")) biomechanicalRefinement += " The athlete is performing the movement with only one side/arm/leg active.";
-  if (nameLower.includes("pegada neutra")) biomechanicalRefinement += " Hands palms facing each other (neutral grip).";
-  if (nameLower.includes("pegada supinada")) biomechanicalRefinement += " Palms facing up/forward (supinated grip).";
-  if (nameLower.includes("pegada pronada")) biomechanicalRefinement += " Palms facing down/back (pronated grip).";
+      if (nameLower.includes("banco 75")) biomechanicalRefinement += " The bench is at a high incline of 75 degrees (almost vertical).";
+      if (nameLower.includes("banco 45")) biomechanicalRefinement += " The bench is at a standard incline of 45 degrees.";
+      if (nameLower.includes("banco declinado")) biomechanicalRefinement += " The bench is declined, head lower than hips.";
 
-  if (nameLower.includes("supino reto") || (nameLower.includes("supino") && nameLower.includes("reto"))) {
-    biomechanicalRefinement += " CRITICAL BIOMECHANICS: Flat Bench Press. The athlete must be LYING COMPLETELY HORIZONTAL and FLAT on a bench. The weights are being pressed directly above the chest. The athlete MUST NOT be sitting or inclined.";
-  } else if (nameLower.includes("supino inclinado")) {
-    biomechanicalRefinement += " CRITICAL BIOMECHANICS: Incline Bench Press. The bench is at a 45-degree angle. The athlete is leaning back on the incline. The dumbbells or barbell are pressed from the upper chest towards the ceiling.";
-  } else if (nameLower.includes("crossover") && nameLower.includes("alta")) {
-    biomechanicalRefinement += " CRITICAL BIOMECHANICS: High-to-Low Cable Crossover. The athlete is standing. The arms move in an arc from a high position to a low-forward position. The hands MUST meet or cross exactly at the level of the NIPPLES (chest level) for maximum pec contraction.";
-  } else if (nameLower.includes("frontal") || nameLower.includes("sobre ombros")) {
-    biomechanicalRefinement += " CRITICAL BIOMECHANICS: Front Squat / Front Rack. The barbell rests on the front shoulders (front rack position), elbows held high and pointing forward. Barbell MUST NOT be on the back.";
-  } else if (nameLower.includes("agachamento livre") || nameLower.includes("back squat")) {
-    biomechanicalRefinement += " Traditional Back Squat. Barbell is resting on the upper back/trapezius.";
-  } else if (nameLower.includes("vela")) {
-    biomechanicalRefinement += " Gymnast style: Athlete is on the floor, raising legs and hips towards the ceiling until vertical (Candlestick position).";
+      if (nameLower.includes("alternado")) biomechanicalRefinement += " The athlete is performing the movement alternating arms (one up, one down).";
+      if (nameLower.includes("unilateral")) biomechanicalRefinement += " The athlete is performing the movement with only one side/arm/leg active.";
+      if (nameLower.includes("pegada neutra")) biomechanicalRefinement += " Hands palms facing each other (neutral grip).";
+      if (nameLower.includes("pegada supinada")) biomechanicalRefinement += " Palms facing up/forward (supinated grip).";
+      if (nameLower.includes("pegada pronada")) biomechanicalRefinement += " Palms facing down/back (pronated grip).";
+
+      if (nameLower.includes("supino reto") || (nameLower.includes("supino") && nameLower.includes("reto"))) {
+        biomechanicalRefinement += " CRITICAL BIOMECHANICS: Flat Bench Press. The athlete must be LYING COMPLETELY HORIZONTAL and FLAT on a bench. The weights are being pressed directly above the chest. The athlete MUST NOT be sitting or inclined.";
+      } else if (nameLower.includes("supino inclinado")) {
+        biomechanicalRefinement += " CRITICAL BIOMECHANICS: Incline Bench Press. The bench is at a 45-degree angle. The athlete is leaning back on the incline. The dumbbells or barbell are pressed from the upper chest towards the ceiling.";
+      } else if (nameLower.includes("crossover") && nameLower.includes("alta")) {
+        biomechanicalRefinement += " CRITICAL BIOMECHANICS: High-to-Low Cable Crossover. The athlete is standing. The arms move in an arc from a high position to a low-forward position. The hands MUST meet or cross exactly at the level of the NIPPLES (chest level) for maximum pec contraction.";
+      } else if (nameLower.includes("frontal") || nameLower.includes("sobre ombros")) {
+        biomechanicalRefinement += " CRITICAL BIOMECHANICS: Front Squat / Front Rack. The barbell rests on the front shoulders (front rack position), elbows held high and pointing forward. Barbell MUST NOT be on the back.";
+      } else if (nameLower.includes("agachamento livre") || nameLower.includes("back squat")) {
+        biomechanicalRefinement += " Traditional Back Squat. Barbell is resting on the upper back/trapezius.";
+      } else if (nameLower.includes("vela")) {
+        biomechanicalRefinement += " Gymnast style: Athlete is on the floor, raising legs and hips towards the ceiling until vertical (Candlestick position).";
+      }
+
+      prompt = `Cinema-grade 8k raw photograph of a muscular Black athlete perfectly executing the exercise "${exerciseName}" in a high-end futuristic gym. ${biomechanicalRefinement} Peak muscle contraction, glistening sweat, volumetric lighting, high contrast, wide shot, professional fitness photography.`;
   }
-
-  const prompt = `Cinema-grade 8k raw photograph of a muscular Black athlete perfectly executing the exercise "${exerciseName}" in a high-end futuristic gym. ${biomechanicalRefinement} Peak muscle contraction, glistening sweat, volumetric lighting, high contrast, wide shot, professional fitness photography.`;
   
   try {
     const response = await ai.models.generateImages({
@@ -139,7 +182,6 @@ export async function generatePeriodizationPlan(studentData: any): Promise<any> 
     ${!isRunning ? `Divisão de Treino: ${studentData.splitPreference}.` : ''}
     Dias por semana: ${studentData.daysPerWeek}.`;
 
-  // Strategy 1: Explicit Schema (Preferred)
   try {
     const response = await ai.models.generateContent({
       model: GEMINI_MODEL,
@@ -147,28 +189,6 @@ export async function generatePeriodizationPlan(studentData: any): Promise<any> 
       config: {
         systemInstruction: systemPrompt,
         responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ["titulo", "volume_por_grupo", "microciclos", "detalhes_treino"],
-          properties: {
-            titulo: { type: Type.STRING },
-            volume_por_grupo: { type: Type.STRING },
-            microciclos: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                required: ["semana", "foco", "faixa_repeticoes", "pse_alvo"],
-                properties: {
-                  semana: { type: Type.NUMBER },
-                  foco: { type: Type.STRING },
-                  faixa_repeticoes: { type: Type.STRING, description: isRunning ? "Ex: Z2 60% ou Pace" : "Ex: 8-12 reps" },
-                  pse_alvo: { type: Type.STRING }
-                }
-              }
-            },
-            detalhes_treino: { type: Type.STRING }
-          }
-        }
       }
     });
 
@@ -176,30 +196,8 @@ export async function generatePeriodizationPlan(studentData: any): Promise<any> 
     text = text.replace(/```json/g, "").replace(/```/g, "").trim();
     return JSON.parse(text);
   } catch (error) {
-    console.warn("Schema generation failed, retrying with raw JSON...", error);
-    
-    // Strategy 2: Fallback to Raw JSON (Robustness)
-    try {
-        const response = await ai.models.generateContent({
-            model: GEMINI_MODEL,
-            contents: userQuery,
-            config: {
-                systemInstruction: systemPrompt + " IMPORTANTE: Retorne APENAS um JSON válido. Sem markdown.",
-                responseMimeType: "application/json"
-            }
-        });
-        
-        let text = response.text || "{}";
-        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        const json = JSON.parse(text);
-        
-        // Basic Validation
-        if (!json.titulo || !json.microciclos) throw new Error("Invalid JSON structure in fallback");
-        return json;
-    } catch (e2) {
-        console.error("Periodization Fatal Error:", e2);
-        return null;
-    }
+    console.error("Periodization Error:", error);
+    return null;
   }
 }
 
