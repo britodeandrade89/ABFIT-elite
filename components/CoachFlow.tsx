@@ -15,7 +15,19 @@ import { db, appId } from '../services/firebase';
 import { RunTrackCoachView } from './RunTrack';
 
 const EXERCISE_DATABASE: Record<string, string[]> = {
-  "Peito": ["Supino Reto", "Supino Inclinado", "Crucifixo", "Cross Over", "Peck Deck", "Supino Sentado Aberto na Máquina", "Supino Sentado Fechado na Máquina", "Supino Unilateral Deitado Aberto na Máquina", "Supino Unilateral Deitado Fechado na Máquina", "Supino Unilateral Inclinado Aberto na Máquina", "Supino Unilateral Inclinado Fechado na Máquina"],
+  "Peito": [
+    "Supino Reto", 
+    "Supino Inclinado", 
+    "Crucifixo", 
+    "Cross Over", 
+    "Peck Deck", 
+    "Supino Sentado Aberto na Máquina", 
+    "Supino Sentado Fechado na Máquina", 
+    "Supino Unilateral Deitado Aberto na Máquina", 
+    "Supino Unilateral Deitado Fechado na Máquina", 
+    "Supino Unilateral Inclinado Aberto na Máquina", 
+    "Supino Unilateral Inclinado Fechado na Máquina"
+  ],
   "Costas": ["Puxada Alta", "Remada Curvada", "Remada Baixa", "Puxada Triângulo", "Pull Down"],
   "Perna": ["Agachamento", "Leg Press", "Extensora", "Stiff", "Cadeira Flexora", "Elevação Pélvica"],
   "Ombro": ["Desenvolvimento", "Abdução Lateral", "Remada Alta", "Frontal"],
