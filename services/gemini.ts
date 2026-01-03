@@ -1,8 +1,23 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { NutritionProfile, MealPlan, MacroNutrients } from "../types";
 
-// Ensure API key is present. In this environment, it's strictly process.env.API_KEY
-const apiKey = process.env.API_KEY || "";
+// Ensure API key is present. Handle environment differences safely.
+const getApiKey = () => {
+  try {
+    if (typeof process !== "undefined" && process.env && process.env.API_KEY) {
+      return process.env.API_KEY;
+    }
+    // Fallback for browser-injected config if process.env isn't replaced by bundler
+    if (typeof window !== "undefined" && (window as any).process?.env?.API_KEY) {
+      return (window as any).process.env.API_KEY;
+    }
+  } catch (e) {
+    console.warn("Error accessing API KEY", e);
+  }
+  return "";
+};
+
+const apiKey = getApiKey();
 const ai = new GoogleGenAI({ apiKey });
 
 const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
@@ -27,7 +42,6 @@ export async function callGemini(prompt: string, systemInstruction: string = "",
     if (isJson) {
       try {
         let text = response.text || "{}";
-        // Clean markdown code blocks if present
         text = text.replace(/```json/g, "").replace(/```/g, "").trim();
         return JSON.parse(text);
       } catch (e) {
@@ -46,23 +60,19 @@ export async function callGemini(prompt: string, systemInstruction: string = "",
 export async function generateExerciseImage(exerciseName: string): Promise<string | null> {
   if (!apiKey) return null;
   
-  // Refinamento Biomecânico Estrito e Correções de Posição (From PrescreveAI Updated)
   let biomechanicalRefinement = "Ensuring perfect biomechanics.";
   const nameLower = exerciseName.toLowerCase();
 
-  // Angle Specifics
   if (nameLower.includes("banco 75")) biomechanicalRefinement += " The bench is at a high incline of 75 degrees (almost vertical).";
   if (nameLower.includes("banco 45")) biomechanicalRefinement += " The bench is at a standard incline of 45 degrees.";
   if (nameLower.includes("banco declinado")) biomechanicalRefinement += " The bench is declined, head lower than hips.";
 
-  // Movement Specifics
   if (nameLower.includes("alternado")) biomechanicalRefinement += " The athlete is performing the movement alternating arms (one up, one down).";
   if (nameLower.includes("unilateral")) biomechanicalRefinement += " The athlete is performing the movement with only one side/arm/leg active.";
   if (nameLower.includes("pegada neutra")) biomechanicalRefinement += " Hands palms facing each other (neutral grip).";
   if (nameLower.includes("pegada supinada")) biomechanicalRefinement += " Palms facing up/forward (supinated grip).";
   if (nameLower.includes("pegada pronada")) biomechanicalRefinement += " Palms facing down/back (pronated grip).";
 
-  // Critical Rules
   if (nameLower.includes("supino reto") || (nameLower.includes("supino") && nameLower.includes("reto"))) {
     biomechanicalRefinement += " CRITICAL BIOMECHANICS: Flat Bench Press. The athlete must be LYING COMPLETELY HORIZONTAL and FLAT on a bench. The weights are being pressed directly above the chest. The athlete MUST NOT be sitting or inclined.";
   } else if (nameLower.includes("supino inclinado")) {
@@ -94,7 +104,6 @@ export async function generateExerciseImage(exerciseName: string): Promise<strin
     return base64 ? `data:image/jpeg;base64,${base64}` : null;
   } catch (error) {
     console.error("Imagen Error:", error);
-    // Fallback to null so UI shows placeholder
     return null;
   }
 }
@@ -112,10 +121,10 @@ export async function generatePeriodizationPlan(studentData: any): Promise<any> 
     TUDO EM PORTUGUÊS.
     
     ESTRUTURA DE RESPOSTA (JSON):
-    1. TITULO: Nome do Macrociclo.
-    2. VOLUME_POR_GRUPO: ${isRunning ? 'Volume semanal em KM' : 'Séries totais por GRUPO MUSCULAR por semana'}.
-    3. MICROCICLOS: Array de 4 semanas.
-    4. DETALHES_TREINO: Texto explicativo.
+    1. titulo: Nome do Macrociclo.
+    2. volume_por_grupo: ${isRunning ? 'Volume semanal em KM' : 'Séries totais por GRUPO MUSCULAR por semana'}.
+    3. microciclos: Array de 4 semanas (semana, foco, faixa_repeticoes, pse_alvo).
+    4. detalhes_treino: Texto explicativo detalhado.
     
     LÓGICA BASEADA NA CONDIÇÃO:
     - Sedentário/Voltando: Começo conservador, foco em técnica/volume baixo.
@@ -130,6 +139,7 @@ export async function generatePeriodizationPlan(studentData: any): Promise<any> 
     ${!isRunning ? `Divisão de Treino: ${studentData.splitPreference}.` : ''}
     Dias por semana: ${studentData.daysPerWeek}.`;
 
+  // Strategy 1: Explicit Schema (Preferred)
   try {
     const response = await ai.models.generateContent({
       model: GEMINI_MODEL,
@@ -147,6 +157,7 @@ export async function generatePeriodizationPlan(studentData: any): Promise<any> 
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
+                required: ["semana", "foco", "faixa_repeticoes", "pse_alvo"],
                 properties: {
                   semana: { type: Type.NUMBER },
                   foco: { type: Type.STRING },
@@ -165,8 +176,30 @@ export async function generatePeriodizationPlan(studentData: any): Promise<any> 
     text = text.replace(/```json/g, "").replace(/```/g, "").trim();
     return JSON.parse(text);
   } catch (error) {
-    console.error("Periodization Error:", error);
-    return null;
+    console.warn("Schema generation failed, retrying with raw JSON...", error);
+    
+    // Strategy 2: Fallback to Raw JSON (Robustness)
+    try {
+        const response = await ai.models.generateContent({
+            model: GEMINI_MODEL,
+            contents: userQuery,
+            config: {
+                systemInstruction: systemPrompt + " IMPORTANTE: Retorne APENAS um JSON válido. Sem markdown.",
+                responseMimeType: "application/json"
+            }
+        });
+        
+        let text = response.text || "{}";
+        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+        const json = JSON.parse(text);
+        
+        // Basic Validation
+        if (!json.titulo || !json.microciclos) throw new Error("Invalid JSON structure in fallback");
+        return json;
+    } catch (e2) {
+        console.error("Periodization Fatal Error:", e2);
+        return null;
+    }
   }
 }
 
