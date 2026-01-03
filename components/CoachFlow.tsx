@@ -5,7 +5,7 @@ import {
   Trash2, Loader2, Brain, Activity, Target, TrendingUp, 
   BookOpen, Zap, AlertCircle, Dumbbell,
   Image as ImageIcon, Save, Book, Ruler, Scale, Footprints,
-  Users, Info, Sparkles, LayoutGrid
+  Users, Info, Sparkles, LayoutGrid, Calendar, Clock, Play, FileText, Folder
 } from 'lucide-react';
 import { Card, EliteFooter, Logo } from './Layout';
 import { Student, Exercise, PhysicalAssessment, Workout } from '../types';
@@ -15,7 +15,7 @@ import { db, appId } from '../services/firebase';
 import { RunTrackCoachView } from './RunTrack';
 
 const EXERCISE_DATABASE: Record<string, string[]> = {
-  "Peito": ["Supino Reto", "Supino Inclinado", "Crucifixo", "Cross Over", "Peck Deck"],
+  "Peito": ["Supino Reto", "Supino Inclinado", "Crucifixo", "Cross Over", "Peck Deck", "Supino Sentado Aberto na Máquina", "Supino Sentado Fechado na Máquina"],
   "Costas": ["Puxada Alta", "Remada Curvada", "Remada Baixa", "Puxada Triângulo", "Pull Down"],
   "Perna": ["Agachamento", "Leg Press", "Extensora", "Stiff", "Cadeira Flexora", "Elevação Pélvica"],
   "Ombro": ["Desenvolvimento", "Abdução Lateral", "Remada Alta", "Frontal"],
@@ -88,7 +88,6 @@ export function StudentManagement({ student, onBack, onNavigate, onEditWorkout }
       </div>
 
       <div className="space-y-4">
-        {/* BOTÃO PERIODIZAÇÃO */}
         <button onClick={() => onNavigate('PERIODIZATION')} className="w-full bg-zinc-900 border border-zinc-800 p-6 rounded-[2.5rem] flex items-center justify-between group hover:bg-zinc-800 transition-all shadow-lg">
            <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-indigo-600/10 rounded-2xl flex items-center justify-center border border-indigo-500/20"><Brain className="w-6 h-6 text-indigo-500" /></div>
@@ -97,9 +96,8 @@ export function StudentManagement({ student, onBack, onNavigate, onEditWorkout }
            <ChevronRight size={20} className="text-zinc-700 group-hover:text-white" />
         </button>
 
-        {/* LISTA DE TREINOS EXISTENTES */}
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-4 mb-2 block italic">Treinos Ativos</label>
+          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-4 mb-2 block italic text-white/50">Planilhas Ativas</label>
           {existingWorkouts.length > 0 ? (
             <div className="grid grid-cols-1 gap-2">
               {existingWorkouts.map((w) => (
@@ -117,12 +115,11 @@ export function StudentManagement({ student, onBack, onNavigate, onEditWorkout }
             </div>
           ) : (
             <div className="p-8 text-center border-2 border-dashed border-zinc-800 rounded-[2.5rem] text-zinc-600 italic text-[10px] uppercase">
-              Nenhum treino prescrito
+              Nenhuma planilha prescrita
             </div>
           )}
         </div>
 
-        {/* BOTÃO CRIAR NOVO TREINO */}
         <button onClick={() => { onEditWorkout(null); onNavigate('WORKOUT_EDITOR'); }} className="w-full bg-red-600 p-6 rounded-[2.5rem] flex items-center justify-between hover:bg-red-700 transition-all shadow-xl group">
            <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20 group-hover:scale-110 transition-transform"><Plus className="w-6 h-6 text-white" /></div>
@@ -304,11 +301,25 @@ export function PeriodizationView({ student, onBack, onProceedToWorkout }: { stu
   );
 }
 
+// --- REDESIGNED WORKOUT EDITOR (PHD VERSION) ---
 export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { student: Student, workoutToEdit: Workout | null, onBack: () => void, onSave: (id: string, data: any) => void }) {
-  const [currentWorkout, setCurrentWorkout] = useState<Workout>(workoutToEdit || { id: Date.now().toString(), title: "TREINO A", exercises: [] });
-  const [selectedMuscle, setSelectedMuscle] = useState("");
-  const [options, setOptions] = useState<string[]>([]);
+  const defaultTitle = student.workouts && student.workouts.length > 0 
+    ? `TREINO ${String.fromCharCode(65 + student.workouts.length)}` 
+    : "TREINO A";
+    
+  const [currentWorkout, setCurrentWorkout] = useState<Workout>(workoutToEdit || { 
+    id: Date.now().toString(), 
+    title: defaultTitle, 
+    exercises: [],
+    startDate: new Date().toLocaleDateString('pt-BR'),
+    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR'),
+    frequencyWeekly: 3
+  });
+
+  const [selectedMuscle, setSelectedMuscle] = useState("Peito");
+  const [options, setOptions] = useState<string[]>(EXERCISE_DATABASE["Peito"]);
   const [imageLoading, setImageLoading] = useState(false);
+  const [previewEx, setPreviewEx] = useState<Exercise | null>(null);
 
   useEffect(() => {
     if (selectedMuscle) setOptions(EXERCISE_DATABASE[selectedMuscle] || []);
@@ -320,6 +331,7 @@ export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { 
     const cue = await generateTechnicalCue(name);
     const newEx: Exercise = { id: Math.random().toString(), name, thumb: img, description: cue, sets: '3', reps: '10-12', rest: '60s' };
     setCurrentWorkout({...currentWorkout, exercises: [...currentWorkout.exercises, newEx]});
+    setPreviewEx(newEx);
     setImageLoading(false);
   };
 
@@ -327,107 +339,127 @@ export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { 
     const existingWorkouts = student.workouts || [];
     const workoutIndex = existingWorkouts.findIndex(w => w.id === currentWorkout.id);
     let updatedWorkouts;
-    
     if (workoutIndex >= 0) {
       updatedWorkouts = [...existingWorkouts];
       updatedWorkouts[workoutIndex] = currentWorkout;
     } else {
       updatedWorkouts = [...existingWorkouts, currentWorkout];
     }
-
     onSave(student.id, { workouts: updatedWorkouts });
     onBack();
   };
 
   return (
-    <div className="p-6 h-screen overflow-y-auto pb-48 text-white custom-scrollbar bg-black text-left">
-      <header className="flex items-center justify-between mb-10 sticky top-0 bg-black z-50 py-2">
-        <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full"><ArrowLeft size={20}/></button>
-        <div className="text-center">
-            <h2 className="text-xl font-black uppercase italic tracking-tighter leading-none mb-1">Prescreve<span className="text-red-600">AI</span></h2>
-            <input 
-                value={currentWorkout.title} 
-                onChange={e => setCurrentWorkout({...currentWorkout, title: e.target.value.toUpperCase()})}
-                className="bg-transparent text-center text-[10px] font-black text-zinc-500 uppercase outline-none focus:text-white border-b border-transparent focus:border-red-600 transition-all w-24"
-            />
+    <div className="p-4 md:p-6 h-screen overflow-y-auto pb-48 text-white custom-scrollbar bg-black text-left">
+      <header className="flex items-center justify-between mb-8 sticky top-0 bg-black/90 backdrop-blur-md z-50 py-4 -mx-6 px-6 border-b border-white/5">
+        <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full hover:bg-zinc-800 transition-colors"><ArrowLeft size={20}/></button>
+        <div className="flex flex-col items-center">
+            <Logo size="text-2xl" subSize="text-[7px]" />
         </div>
-        <button onClick={handleSave} className="bg-green-600 px-8 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-green-900/20 hover:bg-green-700 active:scale-95 transition-all">Salvar</button>
+        <button onClick={handleSave} className="bg-green-600 px-8 py-3 rounded-2xl font-black text-[11px] uppercase shadow-lg shadow-green-900/20 hover:bg-green-700 active:scale-95 transition-all text-white">Salvar</button>
       </header>
-      
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-        <div className="md:col-span-4 space-y-6">
-          <Card className="p-6 bg-zinc-900 border-zinc-800 shadow-2xl">
-             <label className="text-[9px] font-black uppercase text-zinc-500 mb-4 block italic">Inventário Prescrito</label>
-             <select onChange={e => setSelectedMuscle(e.target.value)} className="w-full bg-black p-4 rounded-2xl text-sm font-bold border border-white/10 mb-4 outline-none focus:border-red-600 transition-all">
-                <option value="">Grupo Muscular...</option>
+
+      {/* IDENTIFICAÇÃO DO TREINO (FIGURA 2) */}
+      <Card className="mb-8 p-6 bg-zinc-900/50 border-zinc-800/50">
+         <h4 className="text-orange-500 font-black uppercase text-[10px] tracking-widest mb-4 italic flex items-center gap-2">
+            <Folder size={12} /> IDENTIFICAÇÃO DO TREINO
+         </h4>
+         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div className="md:col-span-1 space-y-1.5">
+               <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1">Planilha</label>
+               <div className="relative">
+                  <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
+                  <input value={currentWorkout.title} onChange={e => setCurrentWorkout({...currentWorkout, title: e.target.value})} className="w-full bg-black p-4 pl-12 rounded-xl text-sm font-black uppercase outline-none focus:border-red-600 border border-white/5" placeholder="NOME DO TREINO" />
+               </div>
+            </div>
+            <div className="space-y-1.5">
+               <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1 italic">Início</label>
+               <input value={currentWorkout.startDate} onChange={e => setCurrentWorkout({...currentWorkout, startDate: e.target.value})} className="w-full bg-black p-4 rounded-xl text-sm font-bold outline-none border border-white/5 text-zinc-300" />
+            </div>
+            <div className="space-y-1.5">
+               <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1 italic">Fim</label>
+               <input value={currentWorkout.endDate} onChange={e => setCurrentWorkout({...currentWorkout, endDate: e.target.value})} className="w-full bg-black p-4 rounded-xl text-sm font-bold outline-none border border-white/5 text-zinc-300" />
+            </div>
+            <div className="space-y-1.5">
+               <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1 italic text-zinc-600">Freq.</label>
+               <input type="number" value={currentWorkout.frequencyWeekly} onChange={e => setCurrentWorkout({...currentWorkout, frequencyWeekly: Number(e.target.value)})} className="w-full bg-black p-4 rounded-xl text-sm font-black outline-none border border-white/5 text-white" />
+            </div>
+         </div>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* SIDEBAR: INVENTÁRIO (FIGURA 2) */}
+        <div className="lg:col-span-4 space-y-6">
+          <Card className="p-6 bg-zinc-900 border-zinc-800 shadow-2xl min-h-[60vh] flex flex-col">
+             <h4 className="text-zinc-400 font-black uppercase text-[10px] tracking-widest mb-6 italic border-b border-white/5 pb-4">
+                INVENTÁRIO PRESCRITO
+             </h4>
+             <select onChange={e => setSelectedMuscle(e.target.value)} className="w-full bg-black p-4 rounded-2xl text-xs font-black uppercase border-2 border-red-600/50 mb-6 outline-none focus:border-red-600 transition-all text-white">
                 {Object.keys(EXERCISE_DATABASE).map(m => <option key={m} value={m}>{m}</option>)}
              </select>
-             <div className="space-y-2 max-h-[40vh] overflow-y-auto custom-scrollbar pr-2">
+             
+             <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar pr-2">
                 {options.map(ex => (
-                  <button key={ex} onClick={() => addEx(ex)} disabled={imageLoading} className="w-full text-left p-4 rounded-xl text-[10px] font-black uppercase bg-black border border-white/5 hover:border-red-600 transition-all flex items-center justify-between group active:scale-[0.98]">
-                    {ex} {imageLoading ? <Loader2 size={12} className="animate-spin text-zinc-600" /> : <Plus size={12} className="opacity-0 group-hover:opacity-100 text-red-600" />}
+                  <button 
+                    key={ex} 
+                    onClick={() => addEx(ex)} 
+                    disabled={imageLoading} 
+                    className="w-full text-left p-4 rounded-xl text-[10px] font-black uppercase bg-black border border-white/5 hover:border-red-600/50 hover:bg-zinc-800 transition-all flex items-center justify-between group active:scale-[0.98] text-zinc-300"
+                  >
+                    <span className="truncate max-w-[80%]">{ex}</span>
+                    {imageLoading ? <Loader2 size={12} className="animate-spin text-zinc-600" /> : <ChevronRight size={14} className="text-zinc-700 group-hover:text-red-600" />}
                   </button>
                 ))}
-                {selectedMuscle && options.length === 0 && <p className="text-[10px] text-zinc-700 italic text-center py-4">Nenhum exercício encontrado</p>}
              </div>
           </Card>
         </div>
 
-        <div className="md:col-span-8">
+        {/* ÁREA DE VISUALIZAÇÃO BIOMECÂNICA (FIGURA 2) */}
+        <div className="lg:col-span-8 space-y-6">
+           <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] aspect-video w-full relative overflow-hidden flex items-center justify-center shadow-2xl group">
+                <div className="absolute inset-0 bg-gradient-to-br from-black/60 to-transparent z-10"></div>
+                {previewEx?.thumb ? (
+                    <img src={previewEx.thumb} className="w-full h-full object-cover animate-in fade-in duration-700" alt="Preview" />
+                ) : (
+                    <div className="flex flex-col items-center gap-6 opacity-20 group-hover:opacity-40 transition-opacity">
+                        <Activity className="text-zinc-600 animate-pulse" size={80} />
+                        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-500 italic">Análise de Performance</p>
+                    </div>
+                )}
+                {previewEx && (
+                    <div className="absolute bottom-6 left-6 z-20">
+                        <h4 className="text-xl font-black italic uppercase text-white drop-shadow-lg">{previewEx.name}</h4>
+                        <p className="text-[9px] text-zinc-400 font-bold uppercase mt-1 tracking-widest flex items-center gap-2"><Sparkles size={10} className="text-red-600" /> Biomecânica validada via IA</p>
+                    </div>
+                )}
+           </div>
+
+           {/* SEQUÊNCIA MONTADA */}
            <div className="space-y-4">
-              <h3 className="text-[10px] font-black uppercase text-zinc-500 ml-2 italic flex items-center gap-2"><LayoutGrid size={12}/> Sequência Montada</h3>
+              <h3 className="text-[11px] font-black uppercase text-zinc-500 ml-4 italic flex items-center gap-2 tracking-widest">
+                 <LayoutGrid size={14}/> SEQUÊNCIA MONTADA
+              </h3>
+              
               {currentWorkout.exercises.length === 0 ? (
-                <div className="p-20 text-center border-2 border-dashed border-zinc-800 rounded-[3.5rem] text-zinc-700 italic text-[10px] uppercase flex flex-col items-center gap-4">
+                <div className="p-20 text-center border-2 border-dashed border-zinc-800 rounded-[3.5rem] text-zinc-700 italic text-[10px] uppercase flex flex-col items-center gap-4 bg-zinc-900/20">
                     <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center border border-zinc-800"><Dumbbell className="text-zinc-800" size={32} /></div>
-                    Selecione exercícios ao lado para compor o treino
+                    SELECIONE EXERCÍCIOS AO LADO PARA COMPOR O TREINO
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {currentWorkout.exercises.map((ex, i) => (
-                        <Card key={ex.id} className="p-5 bg-zinc-900 flex items-center gap-6 border-white/5 shadow-xl group hover:border-red-600/20 transition-all">
-                            <div className="w-20 h-20 rounded-2xl overflow-hidden bg-black shrink-0 border border-white/5 relative group-hover:scale-105 transition-transform">
-                                {ex.thumb ? <img src={ex.thumb} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-800"><ImageIcon size={24}/></div>}
-                                <div className="absolute top-1 left-1 bg-red-600 text-white text-[8px] font-black px-1.5 rounded">{i+1}</div>
+                        <Card key={ex.id} onClick={() => setPreviewEx(ex)} className={`p-5 flex items-center gap-4 border-2 transition-all cursor-pointer ${previewEx?.id === ex.id ? 'border-red-600/50 bg-zinc-800' : 'border-zinc-800 bg-zinc-900/50 hover:border-white/10'}`}>
+                            <div className="w-16 h-16 rounded-xl overflow-hidden bg-black shrink-0 border border-white/5">
+                                {ex.thumb ? <img src={ex.thumb} className="w-full h-full object-cover" /> : <ImageIcon className="m-auto mt-4 text-zinc-800" size={24}/>}
                             </div>
                             <div className="flex-1">
-                                <h4 className="font-black uppercase text-sm italic mb-3 tracking-tighter">{ex.name}</h4>
-                                <div className="flex gap-4">
-                                    <div className="flex-1 space-y-1">
-                                        <label className="text-[7px] font-black text-zinc-600 uppercase">Séries</label>
-                                        <input className="w-full bg-black border border-white/10 p-2 rounded-lg text-[10px] font-black text-center focus:border-red-600 outline-none" 
-                                            value={ex.sets} 
-                                            onChange={e => {
-                                                const newExs = [...currentWorkout.exercises];
-                                                newExs[i].sets = e.target.value;
-                                                setCurrentWorkout({...currentWorkout, exercises: newExs});
-                                            }}
-                                            placeholder="Sets" />
-                                    </div>
-                                    <div className="flex-1 space-y-1">
-                                        <label className="text-[7px] font-black text-zinc-600 uppercase">Reps</label>
-                                        <input className="w-full bg-black border border-white/10 p-2 rounded-lg text-[10px] font-black text-center focus:border-red-600 outline-none" 
-                                            value={ex.reps}
-                                            onChange={e => {
-                                                const newExs = [...currentWorkout.exercises];
-                                                newExs[i].reps = e.target.value;
-                                                setCurrentWorkout({...currentWorkout, exercises: newExs});
-                                            }}
-                                            placeholder="Reps" />
-                                    </div>
-                                    <div className="flex-1 space-y-1">
-                                        <label className="text-[7px] font-black text-zinc-600 uppercase">Descanso</label>
-                                        <input className="w-full bg-black border border-white/10 p-2 rounded-lg text-[10px] font-black text-center focus:border-red-600 outline-none" 
-                                            value={ex.rest}
-                                            onChange={e => {
-                                                const newExs = [...currentWorkout.exercises];
-                                                newExs[i].rest = e.target.value;
-                                                setCurrentWorkout({...currentWorkout, exercises: newExs});
-                                            }}
-                                            placeholder="Rest" />
-                                    </div>
+                                <h4 className="font-black uppercase text-xs italic truncate">{ex.name}</h4>
+                                <div className="flex gap-2 mt-2">
+                                    <div className="bg-black/40 px-2 py-1 rounded text-[8px] font-black text-zinc-400 uppercase">S: {ex.sets}</div>
+                                    <div className="bg-black/40 px-2 py-1 rounded text-[8px] font-black text-zinc-400 uppercase">R: {ex.reps}</div>
                                 </div>
                             </div>
-                            <button onClick={() => setCurrentWorkout({...currentWorkout, exercises: currentWorkout.exercises.filter((_, idx) => idx !== i)})} className="text-zinc-800 hover:text-red-600 transition-colors p-2"><Trash2 size={20}/></button>
+                            <button onClick={(e) => { e.stopPropagation(); setCurrentWorkout({...currentWorkout, exercises: currentWorkout.exercises.filter((_, idx) => idx !== i)}); }} className="text-zinc-800 hover:text-red-600 p-2"><Trash2 size={16}/></button>
                         </Card>
                     ))}
                 </div>
@@ -435,6 +467,7 @@ export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { 
            </div>
         </div>
       </div>
+      <EliteFooter />
     </div>
   );
 }
