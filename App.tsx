@@ -76,7 +76,11 @@ export default function App() {
         if ('serviceWorker' in navigator) {
             try {
                 // Use relative path ./sw.js to respect current origin and base
-                const registration = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+                // Use a non-blocking registration to avoid hanging the main thread
+                navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(err => {
+                    // Suppress errors about origin mismatch or script loading in dev/preview
+                    console.debug("SW Registration suppressed:", err);
+                });
             } catch (err) {
                 // Silently fail in preview environments
             }

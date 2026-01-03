@@ -24,13 +24,6 @@
             appId: "1:324211037832:web:362a46e6446ea37b85b13d"
         };
         window.__app_id = "abfit-elite-production";
-
-        // Service Worker Registration
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js');
-            });
-        }
     </script>
     <style>
       .custom-scrollbar::-webkit-scrollbar { width: 6px; }
