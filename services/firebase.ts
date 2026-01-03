@@ -2,26 +2,17 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Helper to get config safely
-const getFirebaseConfig = () => {
-  if (typeof window !== 'undefined' && window.__firebase_config && window.__firebase_config.apiKey) {
-    return window.__firebase_config;
-  }
-  
-  // Return a dummy config to allow app initialization without crashing.
-  // Auth calls will fail gracefully in App.tsx and fallback to Demo mode.
-  return {
-      apiKey: "dummy-api-key",
-      authDomain: "dummy.firebaseapp.com",
-      projectId: "dummy-project",
-      storageBucket: "dummy.appspot.com",
-      messagingSenderId: "00000000000",
-      appId: "1:00000000000:web:00000000000000"
-  };
+const firebaseConfig = {
+    apiKey: "AIzaSyD_C_yn_RyBSopY7Tb9aqLW8akkXJR94Vg",
+    authDomain: "chaveunica-225e0.firebaseapp.com",
+    projectId: "chaveunica-225e0",
+    storageBucket: "chaveunica-225e0.firebasestorage.app",
+    messagingSenderId: "324211037832",
+    appId: "1:324211037832:web:362a46e6446ea37b85b13d"
 };
 
-const app = initializeApp(getFirebaseConfig());
+const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const appId = (typeof window !== 'undefined' && window.__app_id) ? window.__app_id : 'abfit-elite-production';
+export const appId = 'abfit-elite-production';
