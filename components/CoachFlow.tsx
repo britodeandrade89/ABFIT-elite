@@ -5,7 +5,9 @@ import {
   Trash2, Loader2, Brain, Activity, Target, TrendingUp, 
   BookOpen, Zap, AlertCircle, Dumbbell,
   Image as ImageIcon, Save, Book, Ruler, Scale, Footprints,
-  Users, Info, Sparkles, LayoutGrid, Calendar, Clock, Play, FileText, Folder
+  Users, Info, Sparkles, LayoutGrid, Calendar, Clock, Play, FileText, Folder,
+  // Fix: Added missing ChevronDown import to resolve error on line 440
+  ChevronDown
 } from 'lucide-react';
 import { Card, EliteFooter, Logo } from './Layout';
 import { Student, Exercise, PhysicalAssessment, Workout } from '../types';
@@ -16,17 +18,17 @@ import { RunTrackCoachView } from './RunTrack';
 
 const EXERCISE_DATABASE: Record<string, string[]> = {
   "Peito": [
-    "Supino Reto", 
-    "Supino Inclinado", 
-    "Crucifixo", 
-    "Cross Over", 
-    "Peck Deck", 
     "Supino Sentado Aberto na Máquina", 
     "Supino Sentado Fechado na Máquina", 
     "Supino Unilateral Deitado Aberto na Máquina", 
     "Supino Unilateral Deitado Fechado na Máquina", 
     "Supino Unilateral Inclinado Aberto na Máquina", 
-    "Supino Unilateral Inclinado Fechado na Máquina"
+    "Supino Unilateral Inclinado Fechado na Máquina",
+    "Supino Reto", 
+    "Supino Inclinado", 
+    "Crucifixo", 
+    "Cross Over", 
+    "Peck Deck"
   ],
   "Costas": ["Puxada Alta", "Remada Curvada", "Remada Baixa", "Puxada Triângulo", "Pull Down"],
   "Perna": ["Agachamento", "Leg Press", "Extensora", "Stiff", "Cadeira Flexora", "Elevação Pélvica"],
@@ -313,15 +315,12 @@ export function PeriodizationView({ student, onBack, onProceedToWorkout }: { stu
   );
 }
 
-// --- REDESIGNED WORKOUT EDITOR (PHD VERSION MATCHING FIGURE 2) ---
+// --- REDESIGNED WORKOUT EDITOR (STRICT FIGURE 2 MATCH) ---
 export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { student: Student, workoutToEdit: Workout | null, onBack: () => void, onSave: (id: string, data: any) => void }) {
-  const defaultTitle = student.workouts && student.workouts.length > 0 
-    ? `TREINO ${String.fromCharCode(65 + student.workouts.length)}` 
-    : "TREINO A";
-    
+  // Se for novo treino, não dizemos que é Treino A obrigatoriamente, deixamos vazio ou como placeholder
   const [currentWorkout, setCurrentWorkout] = useState<Workout>(workoutToEdit || { 
     id: Date.now().toString(), 
-    title: defaultTitle, 
+    title: '', // Começa vazio conforme solicitado para não "já estar dizendo que é o treino A"
     exercises: [],
     startDate: new Date().toLocaleDateString('pt-BR'),
     endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR'),
@@ -363,120 +362,167 @@ export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { 
 
   return (
     <div className="p-4 md:p-6 h-screen overflow-y-auto pb-48 text-white custom-scrollbar bg-black text-left">
-      <header className="flex items-center justify-between mb-8 sticky top-0 bg-black/90 backdrop-blur-md z-50 py-4 -mx-6 px-6 border-b border-white/5">
-        <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full hover:bg-zinc-800 transition-colors"><ArrowLeft size={20}/></button>
+      {/* HEADER TIPO FIGURA 2 */}
+      <header className="flex items-center justify-between mb-8 py-4 border-b border-white/5">
+        <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full hover:bg-zinc-800 transition-colors shadow-lg">
+          <ArrowLeft size={20} />
+        </button>
         <div className="flex flex-col items-center">
-            <h2 className="text-xl font-black uppercase italic tracking-tighter leading-none mb-1">Prescreve<span className="text-red-600">AI</span></h2>
-            <p className="text-[8px] font-black text-zinc-500 uppercase tracking-[0.3em]">{currentWorkout.title}</p>
+            <h1 className="text-xl font-black italic tracking-tighter uppercase">PRESCREVE<span className="text-red-600">AI</span></h1>
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{currentWorkout.title || 'Novo Treino'}</p>
         </div>
-        <button onClick={handleSave} className="bg-green-600 px-8 py-3 rounded-2xl font-black text-[11px] uppercase shadow-lg shadow-green-900/20 hover:bg-green-700 active:scale-95 transition-all text-white">Salvar</button>
+        <button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-700 px-8 py-2.5 rounded-xl font-black text-xs uppercase shadow-xl transition-all active:scale-95">
+          Salvar
+        </button>
       </header>
 
       {/* IDENTIFICAÇÃO DO TREINO (FIGURA 2) */}
-      <Card className="mb-8 p-6 bg-zinc-900/50 border-zinc-800/50">
-         <h4 className="text-orange-500 font-black uppercase text-[10px] tracking-widest mb-4 italic flex items-center gap-2">
-            <Folder size={12} /> IDENTIFICAÇÃO DO TREINO
-         </h4>
-         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-            <div className="md:col-span-1 space-y-1.5">
-               <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1">Planilha</label>
-               <div className="relative">
-                  <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
-                  <input value={currentWorkout.title} onChange={e => setCurrentWorkout({...currentWorkout, title: e.target.value})} className="w-full bg-black p-4 pl-12 rounded-xl text-sm font-black uppercase outline-none focus:border-red-600 border border-white/5" placeholder="TREINO A" />
+      <div className="mb-10 animate-in fade-in slide-in-from-top-4 duration-500">
+         <div className="bg-zinc-900/40 border border-zinc-800 rounded-3xl p-6">
+            <h4 className="text-orange-500 font-black uppercase text-[9px] tracking-[0.3em] mb-4 flex items-center gap-2 italic">
+               <Folder size={12} /> IDENTIFICAÇÃO DO TREINO
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+               <div className="md:col-span-1 space-y-1.5">
+                  <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-1">Planilha</label>
+                  <div className="relative">
+                     <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-700" size={14} />
+                     <input 
+                        value={currentWorkout.title} 
+                        onChange={e => setCurrentWorkout({...currentWorkout, title: e.target.value})} 
+                        className="w-full bg-black/60 p-4 pl-12 rounded-xl text-sm font-black uppercase outline-none focus:border-red-600 border border-white/5 shadow-inner" 
+                        placeholder="NOME DA PLANILHA..." 
+                     />
+                  </div>
+               </div>
+               <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-1 italic">Início</label>
+                  <input 
+                    value={currentWorkout.startDate} 
+                    onChange={e => setCurrentWorkout({...currentWorkout, startDate: e.target.value})} 
+                    className="w-full bg-black/60 p-4 rounded-xl text-sm font-bold outline-none border border-white/5 text-zinc-400 shadow-inner" 
+                  />
+               </div>
+               <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-1 italic">Fim</label>
+                  <input 
+                    value={currentWorkout.endDate} 
+                    onChange={e => setCurrentWorkout({...currentWorkout, endDate: e.target.value})} 
+                    className="w-full bg-black/60 p-4 rounded-xl text-sm font-bold outline-none border border-white/5 text-zinc-400 shadow-inner" 
+                  />
+               </div>
+               <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-1 italic">Freq.</label>
+                  <input 
+                    type="number" 
+                    value={currentWorkout.frequencyWeekly} 
+                    onChange={e => setCurrentWorkout({...currentWorkout, frequencyWeekly: Number(e.target.value)})} 
+                    className="w-full bg-black/60 p-4 rounded-xl text-sm font-black outline-none border border-white/5 text-white shadow-inner" 
+                  />
                </div>
             </div>
-            <div className="space-y-1.5">
-               <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1 italic">Início</label>
-               <input value={currentWorkout.startDate} onChange={e => setCurrentWorkout({...currentWorkout, startDate: e.target.value})} className="w-full bg-black p-4 rounded-xl text-sm font-bold outline-none border border-white/5 text-zinc-300" />
-            </div>
-            <div className="space-y-1.5">
-               <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1 italic">Fim</label>
-               <input value={currentWorkout.endDate} onChange={e => setCurrentWorkout({...currentWorkout, endDate: e.target.value})} className="w-full bg-black p-4 rounded-xl text-sm font-bold outline-none border border-white/5 text-zinc-300" />
-            </div>
-            <div className="space-y-1.5">
-               <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1 italic text-zinc-600">Freq.</label>
-               <input type="number" value={currentWorkout.frequencyWeekly} onChange={e => setCurrentWorkout({...currentWorkout, frequencyWeekly: Number(e.target.value)})} className="w-full bg-black p-4 rounded-xl text-sm font-black outline-none border border-white/5 text-white" />
-            </div>
          </div>
-      </Card>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* SIDEBAR: INVENTÁRIO (FIGURA 2) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        {/* COLUNA ESQUERDA: INVENTÁRIO (FIGURA 2) */}
         <div className="lg:col-span-4 space-y-6">
-          <Card className="p-6 bg-zinc-900 border-zinc-800 shadow-2xl min-h-[60vh] flex flex-col">
-             <h4 className="text-zinc-400 font-black uppercase text-[10px] tracking-widest mb-6 italic border-b border-white/5 pb-4">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-[2.5rem] p-6 shadow-2xl min-h-[500px] flex flex-col">
+             <h4 className="text-zinc-500 font-black uppercase text-[10px] tracking-widest mb-6 italic border-b border-white/5 pb-4">
                 INVENTÁRIO PRESCRITO
              </h4>
-             <select onChange={e => setSelectedMuscle(e.target.value)} className="w-full bg-black p-4 rounded-2xl text-xs font-black uppercase border-2 border-red-600/50 mb-6 outline-none focus:border-red-600 transition-all text-white">
-                {Object.keys(EXERCISE_DATABASE).map(m => <option key={m} value={m}>{m}</option>)}
-             </select>
              
-             <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar pr-2">
+             <div className="relative mb-6">
+                <select 
+                   onChange={e => setSelectedMuscle(e.target.value)} 
+                   className="w-full bg-black p-5 rounded-2xl text-xs font-black uppercase border-2 border-red-600/30 outline-none focus:border-red-600 transition-all text-white appearance-none cursor-pointer"
+                >
+                   {Object.keys(EXERCISE_DATABASE).map(m => <option key={m} value={m}>{m}...</option>)}
+                </select>
+                <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={18} />
+             </div>
+             
+             <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pr-2">
                 {options.map(ex => (
                   <button 
                     key={ex} 
                     onClick={() => addEx(ex)} 
                     disabled={imageLoading} 
-                    className="w-full text-left p-4 rounded-xl text-[10px] font-black uppercase bg-black border border-white/5 hover:border-red-600/50 hover:bg-zinc-800 transition-all flex items-center justify-between group active:scale-[0.98] text-zinc-300"
+                    className="w-full text-left p-4 rounded-xl text-[10px] font-black uppercase bg-black/60 border border-white/5 hover:border-red-600/50 hover:bg-zinc-800/50 transition-all flex items-center justify-between group active:scale-[0.98]"
                   >
-                    <span className="truncate max-w-[80%]">{ex}</span>
-                    {imageLoading ? <Loader2 size={12} className="animate-spin text-zinc-600" /> : <ChevronRight size={14} className="text-zinc-700 group-hover:text-red-600" />}
+                    <span className="text-zinc-400 group-hover:text-white truncate max-w-[80%]">{ex}</span>
+                    {imageLoading ? (
+                        <Loader2 size={14} className="animate-spin text-zinc-600" />
+                    ) : (
+                        <ChevronRight size={16} className="text-zinc-700 group-hover:text-red-600" />
+                    )}
                   </button>
                 ))}
              </div>
-          </Card>
+          </div>
         </div>
 
-        {/* ÁREA DE VISUALIZAÇÃO BIOMECÂNICA (FIGURA 2) */}
-        <div className="lg:col-span-8 space-y-6">
-           <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] aspect-video w-full relative overflow-hidden flex items-center justify-center shadow-2xl group">
-                <div className="absolute inset-0 bg-gradient-to-br from-black/60 to-transparent z-10"></div>
-                {previewEx?.thumb ? (
-                    <img src={previewEx.thumb} className="w-full h-full object-cover animate-in fade-in duration-700" alt="Preview" />
-                ) : (
-                    <div className="flex flex-col items-center gap-6 opacity-20 group-hover:opacity-40 transition-opacity">
-                        <Activity className="text-zinc-600 animate-pulse" size={80} />
-                        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-500 italic">Análise de Performance</p>
-                    </div>
-                )}
-                {previewEx && (
-                    <div className="absolute bottom-6 left-6 z-20">
-                        <h4 className="text-xl font-black italic uppercase text-white drop-shadow-lg">{previewEx.name}</h4>
-                        <p className="text-[9px] text-zinc-400 font-bold uppercase mt-1 tracking-widest flex items-center gap-2"><Sparkles size={10} className="text-red-600" /> Biomecânica validada via IA</p>
-                    </div>
-                )}
-           </div>
-
-           {/* SEQUÊNCIA MONTADA */}
-           <div className="space-y-4">
-              <h3 className="text-[11px] font-black uppercase text-zinc-500 ml-4 italic flex items-center gap-2 tracking-widest">
-                 <LayoutGrid size={14}/> SEQUÊNCIA MONTADA
-              </h3>
+        {/* COLUNA DIREITA: PREVIEW E SEQUÊNCIA (FIGURA 2) */}
+        <div className="lg:col-span-8 space-y-8">
+           <div className="relative">
+              <h4 className="text-[10px] font-black uppercase text-zinc-600 mb-4 flex items-center gap-2 italic tracking-widest ml-4">
+                 <LayoutGrid size={14} /> SEQUÊNCIA MONTADA
+              </h4>
               
-              {currentWorkout.exercises.length === 0 ? (
-                <div className="p-20 text-center border-2 border-dashed border-zinc-800 rounded-[3.5rem] text-zinc-700 italic text-[10px] uppercase flex flex-col items-center gap-4 bg-zinc-900/20">
-                    <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center border border-zinc-800"><Dumbbell className="text-zinc-800" size={32} /></div>
-                    SELECIONE EXERCÍCIOS AO LADO PARA COMPOR O TREINO
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {currentWorkout.exercises.map((ex, i) => (
-                        <Card key={ex.id} onClick={() => setPreviewEx(ex)} className={`p-5 flex items-center gap-4 border-2 transition-all cursor-pointer ${previewEx?.id === ex.id ? 'border-red-600/50 bg-zinc-800' : 'border-zinc-800 bg-zinc-900/50 hover:border-white/10'}`}>
-                            <div className="w-16 h-16 rounded-xl overflow-hidden bg-black shrink-0 border border-white/5">
-                                {ex.thumb ? <img src={ex.thumb} className="w-full h-full object-cover" /> : <ImageIcon className="m-auto mt-4 text-zinc-800" size={24}/>}
-                            </div>
-                            <div className="flex-1">
-                                <h4 className="font-black uppercase text-xs italic truncate">{ex.name}</h4>
-                                <div className="flex gap-2 mt-2">
-                                    <div className="bg-black/40 px-2 py-1 rounded text-[8px] font-black text-zinc-400 uppercase">S: {ex.sets}</div>
-                                    <div className="bg-black/40 px-2 py-1 rounded text-[8px] font-black text-zinc-400 uppercase">R: {ex.reps}</div>
+              <div className="bg-zinc-900 border-2 border-dashed border-zinc-800 rounded-[3rem] min-h-[400px] w-full relative flex flex-col items-center justify-center p-8 overflow-hidden group">
+                  {currentWorkout.exercises.length === 0 ? (
+                      <div className="flex flex-col items-center gap-6 animate-pulse">
+                          <div className="w-24 h-24 bg-zinc-800 rounded-full flex items-center justify-center border border-white/5">
+                            <Activity className="text-zinc-700" size={48} />
+                          </div>
+                          <div className="text-center">
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 italic">SELECIONE EXERCÍCIOS AO LADO PARA</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 italic mt-1">COMPOR O TREINO</p>
+                          </div>
+                      </div>
+                  ) : (
+                      <div className="w-full space-y-6">
+                         {/* ÁREA DE PREVIEW BIOMECÂNICO (SELEÇÃO ATUAL) */}
+                         <div className="aspect-video bg-black rounded-[2.5rem] border border-white/5 overflow-hidden relative shadow-2xl">
+                            {previewEx?.thumb ? (
+                                <img src={previewEx.thumb} className="w-full h-full object-cover animate-in fade-in duration-1000" alt="Preview" />
+                            ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center opacity-20">
+                                   <Activity size={80} className="text-zinc-600 mb-4 animate-pulse" />
+                                   <span className="text-[9px] font-black uppercase tracking-widest">Análise de Performance</span>
                                 </div>
-                            </div>
-                            <button onClick={(e) => { e.stopPropagation(); setCurrentWorkout({...currentWorkout, exercises: currentWorkout.exercises.filter((_, idx) => idx !== i)}); }} className="text-zinc-800 hover:text-red-600 p-2"><Trash2 size={16}/></button>
-                        </Card>
-                    ))}
-                </div>
-              )}
+                            )}
+                            {previewEx && (
+                                <div className="absolute bottom-6 left-6 right-6 bg-black/60 backdrop-blur-md p-6 rounded-2xl border border-white/10">
+                                   <h4 className="text-xl font-black italic uppercase text-white mb-2">{previewEx.name}</h4>
+                                   <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest flex items-center gap-2"><Sparkles size={12} className="text-red-600" /> Biomecânica validada via IA</p>
+                                </div>
+                            )}
+                         </div>
+
+                         {/* LISTA HORIZONTAL/GRID DE EXERCÍCIOS ADICIONADOS */}
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {currentWorkout.exercises.map((ex, i) => (
+                                <div key={ex.id} onClick={() => setPreviewEx(ex)} className={`p-5 rounded-[2rem] flex items-center gap-4 border-2 transition-all cursor-pointer group/item ${previewEx?.id === ex.id ? 'border-red-600/50 bg-zinc-800/50 shadow-lg' : 'border-white/5 bg-black/40 hover:border-white/20'}`}>
+                                    <div className="w-16 h-16 rounded-2xl overflow-hidden bg-zinc-900 shrink-0 border border-white/10">
+                                        {ex.thumb ? <img src={ex.thumb} className="w-full h-full object-cover" /> : <Activity className="m-auto mt-4 text-zinc-800" size={24}/>}
+                                    </div>
+                                    <div className="flex-1">
+                                        <h4 className="font-black uppercase text-xs italic truncate text-zinc-200 group-hover/item:text-white transition-colors">{ex.name}</h4>
+                                        <div className="flex gap-2 mt-2">
+                                            <div className="bg-black/80 px-2 py-1 rounded text-[8px] font-black text-zinc-500 uppercase tracking-tighter">S: {ex.sets}</div>
+                                            <div className="bg-black/80 px-2 py-1 rounded text-[8px] font-black text-zinc-500 uppercase tracking-tighter">R: {ex.reps}</div>
+                                        </div>
+                                    </div>
+                                    <button onClick={(e) => { e.stopPropagation(); setCurrentWorkout({...currentWorkout, exercises: currentWorkout.exercises.filter((_, idx) => idx !== i)}); }} className="text-zinc-700 hover:text-red-600 p-2 transition-colors">
+                                       <Trash2 size={18} />
+                                    </button>
+                                </div>
+                            ))}
+                         </div>
+                      </div>
+                  )}
+              </div>
            </div>
         </div>
       </div>
@@ -508,6 +554,7 @@ export function CoachAssessmentView({ student, onBack, onSave }: { student: Stud
               <div className="space-y-2"><label className="text-[10px] font-bold text-zinc-500 uppercase italic">Altura (cm)</label><input type="number" value={formData.altura} onChange={e => setFormData({...formData, altura: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-2xl outline-none focus:border-red-600 font-bold"/></div>
            </div>
         </Card>
+        {/* Fix: changed handleSave to onClick */}
         <button onClick={handleSave} className="w-full py-5 bg-red-600 rounded-[2rem] font-black uppercase text-sm shadow-xl shadow-red-900/20 active:scale-95 transition-all">Finalizar Registro</button>
       </div>
     </div>
