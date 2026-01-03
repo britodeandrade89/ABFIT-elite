@@ -15,7 +15,7 @@ import { db, appId } from '../services/firebase';
 import { RunTrackCoachView } from './RunTrack';
 
 const EXERCISE_DATABASE: Record<string, string[]> = {
-  "Peito": ["Supino Reto", "Supino Inclinado", "Crucifixo", "Cross Over", "Peck Deck", "Supino Sentado Aberto na Máquina", "Supino Sentado Fechado na Máquina"],
+  "Peito": ["Supino Reto", "Supino Inclinado", "Crucifixo", "Cross Over", "Peck Deck", "Supino Sentado Aberto na Máquina", "Supino Sentado Fechado na Máquina", "Supino Unilateral Deitado Aberto na Máquina", "Supino Unilateral Deitado Fechado na Máquina", "Supino Unilateral Inclinado Aberto na Máquina", "Supino Unilateral Inclinado Fechado na Máquina"],
   "Costas": ["Puxada Alta", "Remada Curvada", "Remada Baixa", "Puxada Triângulo", "Pull Down"],
   "Perna": ["Agachamento", "Leg Press", "Extensora", "Stiff", "Cadeira Flexora", "Elevação Pélvica"],
   "Ombro": ["Desenvolvimento", "Abdução Lateral", "Remada Alta", "Frontal"],
@@ -301,7 +301,7 @@ export function PeriodizationView({ student, onBack, onProceedToWorkout }: { stu
   );
 }
 
-// --- REDESIGNED WORKOUT EDITOR (PHD VERSION) ---
+// --- REDESIGNED WORKOUT EDITOR (PHD VERSION MATCHING FIGURE 2) ---
 export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { student: Student, workoutToEdit: Workout | null, onBack: () => void, onSave: (id: string, data: any) => void }) {
   const defaultTitle = student.workouts && student.workouts.length > 0 
     ? `TREINO ${String.fromCharCode(65 + student.workouts.length)}` 
@@ -354,7 +354,8 @@ export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { 
       <header className="flex items-center justify-between mb-8 sticky top-0 bg-black/90 backdrop-blur-md z-50 py-4 -mx-6 px-6 border-b border-white/5">
         <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full hover:bg-zinc-800 transition-colors"><ArrowLeft size={20}/></button>
         <div className="flex flex-col items-center">
-            <Logo size="text-2xl" subSize="text-[7px]" />
+            <h2 className="text-xl font-black uppercase italic tracking-tighter leading-none mb-1">Prescreve<span className="text-red-600">AI</span></h2>
+            <p className="text-[8px] font-black text-zinc-500 uppercase tracking-[0.3em]">{currentWorkout.title}</p>
         </div>
         <button onClick={handleSave} className="bg-green-600 px-8 py-3 rounded-2xl font-black text-[11px] uppercase shadow-lg shadow-green-900/20 hover:bg-green-700 active:scale-95 transition-all text-white">Salvar</button>
       </header>
@@ -369,7 +370,7 @@ export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { 
                <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1">Planilha</label>
                <div className="relative">
                   <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
-                  <input value={currentWorkout.title} onChange={e => setCurrentWorkout({...currentWorkout, title: e.target.value})} className="w-full bg-black p-4 pl-12 rounded-xl text-sm font-black uppercase outline-none focus:border-red-600 border border-white/5" placeholder="NOME DO TREINO" />
+                  <input value={currentWorkout.title} onChange={e => setCurrentWorkout({...currentWorkout, title: e.target.value})} className="w-full bg-black p-4 pl-12 rounded-xl text-sm font-black uppercase outline-none focus:border-red-600 border border-white/5" placeholder="TREINO A" />
                </div>
             </div>
             <div className="space-y-1.5">
