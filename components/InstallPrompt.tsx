@@ -9,28 +9,28 @@ export function InstallPrompt() {
   useEffect(() => {
     // Check if already installed (Standalone mode)
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
-    if (isStandalone) return;
+    
+    if (!isStandalone) {
+        // Detect Platform
+        const userAgent = window.navigator.userAgent.toLowerCase();
+        const isIos = /iphone|ipad|ipod/.test(userAgent);
+        const isDesktop = !/android|iphone|ipad|ipod/.test(userAgent);
 
-    // Detect Platform
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIos = /iphone|ipad|ipod/.test(userAgent);
-    const isDesktop = !/android|iphone|ipad|ipod/.test(userAgent);
-
-    if (isIos) {
-        setPlatform('ios');
-        // Show immediately for iOS if not standalone
-        setShowPrompt(true);
-    } else if (isDesktop) {
-        setPlatform('desktop');
-        // Show immediately for Desktop
+        if (isIos) {
+            setPlatform('ios');
+        } else if (isDesktop) {
+            setPlatform('desktop');
+        }
+        
+        // Show immediately if not installed
         setShowPrompt(true);
     }
 
-    // Android/Chrome Event Listener
+    // Capture the event for Android/Chrome to enable the "Install" button functionality
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setPlatform('android');
+      setPlatform('android'); // Confirm it's an installable platform
       setShowPrompt(true);
     };
 
@@ -42,7 +42,10 @@ export function InstallPrompt() {
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+        alert("Para instalar, use o menu do seu navegador e selecione 'Instalar App' ou 'Adicionar à Tela Inicial'.");
+        return;
+    }
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') {
@@ -54,7 +57,7 @@ export function InstallPrompt() {
   if (!showPrompt) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-end md:items-center justify-center p-4 animate-in fade-in duration-500">
+    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-end md:items-center justify-center p-4 animate-in fade-in duration-500">
        <div className="bg-zinc-900 border border-red-600/30 w-full max-w-md rounded-[2.5rem] p-8 relative shadow-2xl animate-in slide-in-from-bottom-10">
           <button onClick={() => setShowPrompt(false)} className="absolute top-6 right-6 p-2 text-zinc-500 hover:text-white transition-colors bg-zinc-800 rounded-full"><X size={20}/></button>
           
@@ -65,7 +68,7 @@ export function InstallPrompt() {
              
              <h3 className="text-2xl font-black uppercase italic tracking-tighter text-white mb-2">Instalar App</h3>
              <p className="text-sm text-zinc-400 font-medium leading-relaxed px-4 mb-8">
-                Instale o <strong className="text-white">ABFIT Elite</strong> para acesso offline, notificações e performance em tela cheia.
+                Instale o <strong className="text-white">ABFIT Elite</strong> para melhor performance, acesso offline e tela cheia.
              </p>
 
              {platform === 'ios' && (
@@ -77,7 +80,7 @@ export function InstallPrompt() {
 
              {(platform === 'android' || platform === 'desktop') && (
                 <button onClick={handleInstallClick} className="w-full py-4 bg-white text-black font-black uppercase tracking-widest rounded-2xl hover:bg-zinc-200 transition-colors shadow-lg flex items-center justify-center gap-2">
-                   <Download size={18} /> Instalar Agora
+                   <Download size={18} /> {deferredPrompt ? 'Instalar Agora' : 'Adicionar Atalho'}
                 </button>
              )}
           </div>

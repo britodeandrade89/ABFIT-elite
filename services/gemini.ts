@@ -1,28 +1,19 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { NutritionProfile, MealPlan, MacroNutrients } from "../types";
 
-// Ensure API key is present. Handle environment differences safely.
-const getApiKey = () => {
-  try {
-    if (typeof process !== "undefined" && process.env && process.env.API_KEY) {
-      return process.env.API_KEY;
-    }
-    // Fallback for browser-injected config if process.env isn't replaced by bundler
-    if (typeof window !== "undefined" && (window as any).process?.env?.API_KEY) {
-      return (window as any).process.env.API_KEY;
-    }
-  } catch (e) {
-    console.warn("Error accessing API KEY", e);
-  }
-  return "";
-};
-
-const apiKey = getApiKey();
+// Always use process.env.API_KEY directly as per guidelines.
+const apiKey = process.env.API_KEY || "";
 const ai = new GoogleGenAI({ apiKey });
 
-const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
-const IMAGEN_MODEL = "imagen-4.0-generate-001";
+// Use Gemini 3 models for text tasks.
+const GEMINI_MODEL = "gemini-3-flash-preview";
+// Use gemini-2.5-flash-image for default image generation.
+const IMAGE_GENERATION_MODEL = "gemini-2.5-flash-image";
 
+/**
+ * Call Gemini with provided prompt and system instruction.
+ */
 export async function callGemini(prompt: string, systemInstruction: string = "", isJson: boolean = false): Promise<any> {
   if (!apiKey) {
     console.warn("API Key is missing for Gemini.");
@@ -42,6 +33,7 @@ export async function callGemini(prompt: string, systemInstruction: string = "",
     if (isJson) {
       try {
         let text = response.text || "{}";
+        // Sanitize potentially wrapped JSON blocks.
         text = text.replace(/```json/g, "").replace(/```/g, "").trim();
         return JSON.parse(text);
       } catch (e) {
@@ -57,6 +49,9 @@ export async function callGemini(prompt: string, systemInstruction: string = "",
   }
 }
 
+/**
+ * Generate insights for a student based on their profile.
+ */
 export async function generateBioInsight(student: any): Promise<string> {
   if (!apiKey) return "";
   const prompt = `Analise este perfil de aluno e forneça 3 orientações curtas e cruciais para o treinador. 
@@ -67,6 +62,9 @@ export async function generateBioInsight(student: any): Promise<string> {
   return await callGemini(prompt, "Você é um Fisiologista Sênior.");
 }
 
+/**
+ * Generate technical gold cues for an exercise.
+ */
 export async function generateTechnicalCue(exerciseName: string, studentInfo: string = ""): Promise<string> {
   if (!apiKey) return "";
   const prompt = `Forneça uma dica técnica de "ouro" para o exercício "${exerciseName}". 
@@ -76,6 +74,9 @@ export async function generateTechnicalCue(exerciseName: string, studentInfo: st
   return await callGemini(prompt, "Você é um Treinador Biomecânico de Elite.");
 }
 
+/**
+ * Analyze exercise biomechanics and generate a visual prompt for image generation.
+ */
 export async function analyzeExerciseBiomechanics(exerciseName: string): Promise<any> {
   if (!apiKey) return null;
   const prompt = `Analise o exercício "${exerciseName}". 
@@ -96,6 +97,9 @@ export async function analyzeExerciseBiomechanics(exerciseName: string): Promise
   return await callGemini(prompt, "Você é um Especialista em Biomecânica.", true);
 }
 
+/**
+ * Generate an exercise image using Gemini 2.5 Flash Image.
+ */
 export async function generateExerciseImage(exerciseName: string, customPrompt?: string): Promise<string | null> {
   if (!apiKey) return null;
   
@@ -133,26 +137,38 @@ export async function generateExerciseImage(exerciseName: string, customPrompt?:
   }
   
   try {
-    const response = await ai.models.generateImages({
-        model: IMAGEN_MODEL,
-        prompt: prompt,
+    // Generate content using gemini-2.5-flash-image for image generation.
+    const response = await ai.models.generateContent({
+        model: IMAGE_GENERATION_MODEL,
+        contents: {
+          parts: [{ text: prompt }]
+        },
         config: {
-          numberOfImages: 1,
-          outputMimeType: 'image/jpeg',
-          aspectRatio: '16:9',
+          imageConfig: {
+            aspectRatio: '16:9',
+          },
         },
     });
 
-    const base64 = response.generatedImages?.[0]?.image?.imageBytes;
-    return base64 ? `data:image/jpeg;base64,${base64}` : null;
+    let base64 = null;
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          base64 = part.inlineData.data;
+          break;
+        }
+      }
+    }
+    return base64 ? `data:image/png;base64,${base64}` : null;
   } catch (error) {
-    console.error("Imagen Error:", error);
+    console.error("Image Generation Error:", error);
     return null;
   }
 }
 
-// --- Periodization AI ---
-
+/**
+ * Generate a periodization plan for a student.
+ */
 export async function generatePeriodizationPlan(studentData: any): Promise<any> {
   if (!apiKey) return null;
 
@@ -201,8 +217,9 @@ export async function generatePeriodizationPlan(studentData: any): Promise<any> 
   }
 }
 
-// --- Nutrition AI Functions ---
-
+/**
+ * Generate a one-day meal plan based on a nutrition profile.
+ */
 export async function generateAIMealPlan(profile: NutritionProfile): Promise<MealPlan | null> {
   const prompt = `
     Generate a one-day meal plan for a client with the following profile:
@@ -236,6 +253,9 @@ export async function generateAIMealPlan(profile: NutritionProfile): Promise<Mea
   return null;
 }
 
+/**
+ * Estimate macronutrients for a food description.
+ */
 export async function estimateFoodMacros(foodDescription: string): Promise<MacroNutrients | null> {
   const prompt = `
     Analyze the nutritional content of the following food/meal: "${foodDescription}".

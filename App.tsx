@@ -3,7 +3,7 @@ import {
   User as UserIcon, Loader2, Dumbbell, 
   CheckCircle2, HeartPulse, Trophy, Camera 
 } from 'lucide-react';
-import { Logo, Card, BackgroundWrapper, EliteFooter, WeatherWidget, NotificationBadge } from './components/Layout';
+import { Logo, BackgroundWrapper, EliteFooter, WeatherWidget, NotificationBadge } from './components/Layout';
 import { ProfessorDashboard, StudentManagement, WorkoutEditorView, CoachAssessmentView, PeriodizationView, RunningWorkoutManager } from './components/CoachFlow';
 import { WorkoutSessionView, WorkoutCounterView, StudentAssessmentView, CorreRJView } from './components/StudentFlow';
 import { InstallPrompt } from './components/InstallPrompt';
@@ -75,15 +75,8 @@ export default function App() {
     const registerSW = async () => {
         if ('serviceWorker' in navigator) {
             try {
-                // Use relative path ./sw.js to respect current origin and base
-                // Use a non-blocking registration to avoid hanging the main thread
-                navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(err => {
-                    // Suppress errors about origin mismatch or script loading in dev/preview
-                    console.debug("SW Registration suppressed:", err);
-                });
-            } catch (err) {
-                // Silently fail in preview environments
-            }
+                navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.debug);
+            } catch (err) {}
         }
     };
     registerSW();
@@ -92,31 +85,17 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
     const initAuth = async () => { 
-        // Check if we are using the mock API key from index.html or if it's missing
-        const config = window.__firebase_config;
-        const isMock = !config || !config.apiKey || config.apiKey === "mock-api-key";
-
-        if (isMock) {
-            console.warn("ABFIT Elite: Running in DEMO mode (Mock/Missing Config).");
-            if (mounted) {
-              setUser({ uid: "demo-user", isAnonymous: true });
-              setLoading(false);
-            }
-            return;
-        }
-
         try { 
             await signInAnonymously(auth); 
         } catch (err: any) { 
             if (!mounted) return;
-            console.warn("Firebase Auth Warning: Could not sign in anonymously. Switching to Fallback/Demo User.", err.code);
-            setUser({ uid: "fallback-demo-user", isAnonymous: true });
+            console.warn("Auth mode: Demo (Backend unconfigured/failed)", err.code);
+            setUser({ uid: "demo-user", isAnonymous: true });
             setLoading(false);
         } 
     };
     initAuth();
     
-    // Only listen to auth changes if not manually set to demo user
     const unsub = onAuthStateChanged(auth, (u) => { 
         if (u && mounted) {
             setUser(u); 
@@ -132,8 +111,8 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     
-    // In demo mode, skipping real Firestore connection if likely to fail
-    if (user.uid === "demo-user" || user.uid === "fallback-demo-user") {
+    // In demo mode
+    if (user.uid === "demo-user") {
         setStudents([]);
         return;
     }
@@ -143,13 +122,12 @@ export default function App() {
         const unsub = onSnapshot(q, (snapshot) => { 
             setStudents(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student))); 
         }, (error) => {
-            console.warn("Firestore snapshot error (expected in demo if rules deny):", error);
-            // Fallback for demo if no backend access
+            console.warn("Firestore access denied, switching to demo data.", error);
             setStudents([]); 
         });
         return () => unsub();
     } catch (e) {
-        console.warn("Firestore init error", e);
+        console.warn("Firestore error", e);
         setStudents([]);
     }
   }, [user]);
@@ -168,7 +146,7 @@ export default function App() {
             {
               id: 'treino-a-fixed',
               title: 'Treino A',
-              exercises: [] // EMPTY EXERCISES AS REQUESTED
+              exercises: [] // EMPTY EXERCISES as requested for Andre
             }
           ]
         }, 
@@ -200,25 +178,18 @@ export default function App() {
 
   const handleSaveData = async (sid: string, data: any) => {
     try { 
-      // Only try to save if not in demo mode with mock user
-      if (user?.uid !== "demo-user" && user?.uid !== "fallback-demo-user") {
+      if (user?.uid !== "demo-user") {
           const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', sid);
           await setDoc(docRef, data, { merge: true });
-      } else {
-        console.log("Demo Mode: Data not saved to backend", data);
       }
       
-      // Local state update is critical for demo
+      // Optimistic Update
       setStudents(prev => prev.map(s => s.id === sid ? { ...s, ...data } : s));
       if (selectedStudent && selectedStudent.id === sid) {
           setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
       }
     } catch (e) { 
         console.error("Save error", e); 
-        // Mock update for demo
-        if (selectedStudent && selectedStudent.id === sid) {
-            setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
-        }
     }
   };
 
@@ -242,6 +213,7 @@ export default function App() {
       {view === 'DASHBOARD' && selectedStudent && (
         <div className="p-6 text-white text-center pt-10 h-screen overflow-y-auto custom-scrollbar">
           <div className="flex justify-between items-start mb-8 text-white">
+             {/* Profile Section with Notification Bell */}
              <div className="relative group text-left">
                 <input type="file" id="photo-upload-main" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
                 <label htmlFor="photo-upload-main" className="block cursor-pointer relative text-left">
@@ -252,11 +224,17 @@ export default function App() {
                       <Camera size={10} className="text-white" />
                    </div>
                 </label>
-                {/* Notification Bell over Profile */}
-                <div className="absolute -top-3 -right-3 z-20">
-                   <NotificationBadge notifications={selectedStudent.notifications || []} onClick={() => alert("Notificações em breve")} />
+                
+                {/* Notification Bell Badge positioned over the profile */}
+                <div className="absolute -top-2 -right-2 z-20">
+                   <NotificationBadge 
+                      notifications={selectedStudent.notifications || []} 
+                      onClick={() => alert("Central de Notificações: Nenhuma novidade no momento.")} 
+                   />
                 </div>
              </div>
+             
+             {/* Weather Widget */}
              <WeatherWidget />
           </div>
           <div className="mb-10 text-center"><Logo size="text-6xl" subSize="text-[9px]" /></div>
