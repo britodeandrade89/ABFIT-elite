@@ -6,7 +6,6 @@ import {
   BookOpen, Zap, AlertCircle, Dumbbell,
   Image as ImageIcon, Save, Book, Ruler, Scale, Footprints,
   Users, Info, Sparkles, LayoutGrid, Calendar, Clock, Play, FileText, Folder,
-  // Fix: Added missing ChevronDown import to resolve error on line 440
   ChevronDown
 } from 'lucide-react';
 import { Card, EliteFooter, Logo } from './Layout';
@@ -554,7 +553,6 @@ export function CoachAssessmentView({ student, onBack, onSave }: { student: Stud
               <div className="space-y-2"><label className="text-[10px] font-bold text-zinc-500 uppercase italic">Altura (cm)</label><input type="number" value={formData.altura} onChange={e => setFormData({...formData, altura: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-2xl outline-none focus:border-red-600 font-bold"/></div>
            </div>
         </Card>
-        {/* Fix: changed handleSave to onClick */}
         <button onClick={handleSave} className="w-full py-5 bg-red-600 rounded-[2rem] font-black uppercase text-sm shadow-xl shadow-red-900/20 active:scale-95 transition-all">Finalizar Registro</button>
       </div>
     </div>

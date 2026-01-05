@@ -2,18 +2,19 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   User as UserIcon, Loader2, Dumbbell, 
-  CheckCircle2, HeartPulse, Trophy, Camera, Brain, Ruler, Footprints
+  CheckCircle2, HeartPulse, Trophy, Camera, Brain, Ruler, Footprints, AlertCircle
 } from 'lucide-react';
-import { Logo, BackgroundWrapper, EliteFooter, WeatherWidget, NotificationBadge } from './components/Layout';
+import { Logo, BackgroundWrapper, EliteFooter, WeatherWidget, NotificationBadge, SyncStatus } from './components/Layout';
 import { ProfessorDashboard, StudentManagement, WorkoutEditorView, CoachAssessmentView, PeriodizationView, RunTrackManager } from './components/CoachFlow';
 import { WorkoutSessionView, WorkoutCounterView, StudentAssessmentView, CorreRJView, StudentPeriodizationView } from './components/StudentFlow';
+import { RunTrackStudentView } from './components/RunTrack';
 import { InstallPrompt } from './components/InstallPrompt';
 import { collection, query, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { auth, db, appId } from './services/firebase';
 import { Student, Workout } from './types';
 
-function LoginScreen({ onLogin, error }: { onLogin: (val: string) => void, error: string }) {
+function LoginScreen({ onLogin, error, isDemo }: { onLogin: (val: string) => void, error: string, isDemo: boolean }) {
   const [input, setInput] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -37,7 +38,15 @@ function LoginScreen({ onLogin, error }: { onLogin: (val: string) => void, error
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center font-sans">
       <div className="animate-in fade-in zoom-in duration-700 text-center"><Logo /></div>
-      <div className="w-full max-w-sm mt-12 space-y-4 animate-in slide-in-from-bottom-10 duration-1000 relative">
+      
+      {isDemo && (
+        <div className="mt-6 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-2 animate-pulse">
+          <AlertCircle size={14} className="text-amber-500" />
+          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Modo Demonstração Ativo (Firestore Offline)</span>
+        </div>
+      )}
+
+      <div className="w-full max-w-sm mt-8 space-y-4 animate-in slide-in-from-bottom-10 duration-1000 relative">
         <div className="space-y-1 text-left">
           <label className="text-[10px] font-black text-zinc-500 ml-4 uppercase tracking-widest text-white">Identificação</label>
           <div className="relative" ref={dropdownRef}>
@@ -71,14 +80,17 @@ export default function App() {
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   useEffect(() => {
     const initAuth = async () => { 
         try { 
             await signInAnonymously(auth); 
         } catch (err: any) { 
+            console.warn("Auth Fallback:", err.message);
             setUser({ uid: "demo-user", isAnonymous: true });
             setLoading(false);
+            setIsDemoMode(true);
         } 
     };
     initAuth();
@@ -94,7 +106,8 @@ export default function App() {
     const unsub = onSnapshot(q, (snapshot) => { 
         setStudents(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student))); 
     }, (error) => {
-        console.warn("Firestore access restricted:", error.message);
+        console.warn("Firestore access restricted (Entering Demo Mode):", error.message);
+        setIsDemoMode(true);
     });
     return () => unsub();
   }, [user]);
@@ -123,15 +136,21 @@ export default function App() {
   };
 
   const handleSaveData = async (sid: string, data: any) => {
+    // Local update always happens first for responsiveness (Optimistic UI)
+    setStudents(prev => prev.map(s => s.id === sid ? { ...s, ...data } : s));
+    if (selectedStudent && selectedStudent.id === sid) setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
+
+    if (isDemoMode) {
+        console.log("Demo Mode: Data preserved in local session only.");
+        return;
+    }
+
     try { 
       const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', sid);
       await setDoc(docRef, data, { merge: true });
-      setStudents(prev => prev.map(s => s.id === sid ? { ...s, ...data } : s));
-      if (selectedStudent && selectedStudent.id === sid) setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
     } catch (e: any) { 
       console.warn("Save Error (Likely Firestore Permission):", e.message); 
-      setStudents(prev => prev.map(s => s.id === sid ? { ...s, ...data } : s));
-      if (selectedStudent && selectedStudent.id === sid) setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
+      setIsDemoMode(true);
     }
   };
 
@@ -140,7 +159,7 @@ export default function App() {
   return (
     <BackgroundWrapper>
       <InstallPrompt />
-      {view === 'LOGIN' && <LoginScreen onLogin={handleLogin} error={loginError} />}
+      {view === 'LOGIN' && <LoginScreen onLogin={handleLogin} error={loginError} isDemo={isDemoMode} />}
       
       {view === 'DASHBOARD' && selectedStudent && (
         <div className="p-6 text-white text-center pt-10 h-screen overflow-y-auto custom-scrollbar">
@@ -148,7 +167,10 @@ export default function App() {
              <div className="w-16 h-16 rounded-[1.5rem] bg-zinc-900 border-2 border-red-600 overflow-hidden shadow-2xl">
                 {selectedStudent?.photoUrl ? <img src={selectedStudent.photoUrl} className="w-full h-full object-cover" alt="Perfil"/> : <div className="w-full h-full flex items-center justify-center"><UserIcon className="text-zinc-700" /></div>}
              </div>
-             <WeatherWidget />
+             <div className="flex flex-col items-end gap-2">
+                <WeatherWidget />
+                <SyncStatus isDemo={isDemoMode} />
+             </div>
           </div>
           <div className="mb-10 text-center"><Logo size="text-6xl" subSize="text-[9px]" /></div>
           
@@ -183,6 +205,7 @@ export default function App() {
       {view === 'STUDENT_PERIODIZATION' && selectedStudent && <StudentPeriodizationView student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
       {view === 'WORKOUTS' && selectedStudent && <WorkoutSessionView user={selectedStudent} onBack={() => setView('DASHBOARD')} onSave={handleSaveData} />}
       {view === 'STUDENT_ASSESSMENT' && selectedStudent && <StudentAssessmentView student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
+      {view === 'RUNTRACK_STUDENT' && selectedStudent && <RunTrackStudentView student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
       
       {view === 'PROFESSOR_DASH' && <ProfessorDashboard students={allStudentsForCoach} onLogout={() => setView('LOGIN')} onSelect={(s) => { setSelectedStudent(s); setView('STUDENT_MGMT'); }} />}
       {view === 'STUDENT_MGMT' && selectedStudent && <StudentManagement student={selectedStudent} onBack={() => setView('PROFESSOR_DASH')} onNavigate={setView} onEditWorkout={setSelectedWorkout} />}

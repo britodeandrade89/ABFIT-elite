@@ -3,16 +3,15 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-    apiKey: "AIzaSyD_C_yn_RyBSopY7Tb9aqLW8akkXJR94Vg",
-    authDomain: "chaveunica-225e0.firebaseapp.com",
-    projectId: "chaveunica-225e0",
-    storageBucket: "chaveunica-225e0.firebasestorage.app",
-    messagingSenderId: "324211037832",
-    appId: "1:324211037832:web:362a46e6446ea37b85b13d"
+    apiKey: process.env.VITE_FIREBASE_API_KEY, // Use prefixo VITE_
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.VITE_FIREBASE_SENDER_ID,
+    appId: process.env.VITE_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
-
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const appId = 'abfit-elite-production';
