@@ -7,6 +7,7 @@ import {
 import { Logo, BackgroundWrapper, EliteFooter, WeatherWidget, NotificationBadge, SyncStatus } from './components/Layout';
 import { ProfessorDashboard, StudentManagement, WorkoutEditorView, CoachAssessmentView, PeriodizationView, RunTrackManager } from './components/CoachFlow';
 import { WorkoutSessionView, WorkoutCounterView, StudentAssessmentView, CorreRJView, StudentPeriodizationView } from './components/StudentFlow';
+// Fix: Added missing import for RunTrackStudentView to resolve the TS2304 error
 import { RunTrackStudentView } from './components/RunTrack';
 import { InstallPrompt } from './components/InstallPrompt';
 import { collection, query, onSnapshot, doc, setDoc } from 'firebase/firestore';
@@ -136,7 +137,7 @@ export default function App() {
   };
 
   const handleSaveData = async (sid: string, data: any) => {
-    // Local update always happens first for responsiveness (Optimistic UI)
+    // Local update always happens first for responsiveness
     setStudents(prev => prev.map(s => s.id === sid ? { ...s, ...data } : s));
     if (selectedStudent && selectedStudent.id === sid) setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
 

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Activity, Calendar, ChevronDown, Clock, 
@@ -112,16 +111,15 @@ export function RunTrackAnamnese({ student, onSave, onBack }: { student: Student
 
   const handleSave = async () => {
     setSaving(true);
-    const updatedData = { ...data, anamneseComplete: true };
     try {
         // Save to student profile in Firebase
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id);
+        const updatedData = { ...data, anamneseComplete: true };
         await setDoc(docRef, updatedData, { merge: true });
+        onSave(updatedData);
     } catch (e) {
-        console.warn("Error saving anamnese (Demo Mode Active)", e);
+        console.error("Error saving anamnese", e);
     }
-    // Always proceed in UI to prevent blocking
-    onSave(updatedData);
     setSaving(false);
   };
 
@@ -207,17 +205,11 @@ export function RunTrackCoachView({ student, onBack }: { student: Student, onBac
 
   // Load Models
   useEffect(() => {
-      try {
-        const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'modelWorkouts'), where('studentId', '==', student.id));
-        const unsub = onSnapshot(q, (snap) => {
-            setModelWorkouts(snap.docs.map(d => ({id: d.id, ...d.data()})));
-        }, (err) => {
-            console.warn("RunTrack Coach Firestore Offline", err);
-        });
-        return () => unsub();
-      } catch (e) {
-        console.warn("RunTrack Init Error (Offline Mode)", e);
-      }
+      const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'modelWorkouts'), where('studentId', '==', student.id));
+      const unsub = onSnapshot(q, (snap) => {
+          setModelWorkouts(snap.docs.map(d => ({id: d.id, ...d.data()})));
+      });
+      return () => unsub();
   }, [student.id]);
 
   const processAiDiagnosis = () => {
@@ -274,35 +266,20 @@ export function RunTrackCoachView({ student, onBack }: { student: Student, onBac
     }
 
     const tTotal = calculateTotalTime(finalModel);
-    const newWorkoutEntry = { 
+
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'modelWorkouts'), { 
         ...finalModel, 
         studentId: student.id,
         createdAt: new Date().toISOString(),
         totalTime: tTotal,
         isAiOptimized: !newModel.distance && !newModel.stimulusTime
-    };
-
-    try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'modelWorkouts'), newWorkoutEntry);
-    } catch (e) { 
-        console.warn("Save error (Demo Mode)", e);
-        // Fallback for demo mode
-        setModelWorkouts(prev => [...prev, { id: Date.now().toString(), ...newWorkoutEntry }]);
-    }
-    
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
-    setNewModel({ dayOfWeek: 'Segunda', type: 'rodagem', distance: '', pace: '', description: '', warmupTime: '', sets: '1', reps: '1', stimulusTime: '', recoveryTime: '', cooldownTime: '' });
-    setIsSaving(false);
-  };
-
-  const handleDelete = async (id: string) => {
-      try {
-          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'modelWorkouts', id));
-      } catch (e) {
-          console.warn("Delete error (Demo Mode)", e);
-          setModelWorkouts(prev => prev.filter(m => m.id !== id));
-      }
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      setNewModel({ dayOfWeek: 'Segunda', type: 'rodagem', distance: '', pace: '', description: '', warmupTime: '', sets: '1', reps: '1', stimulusTime: '', recoveryTime: '', cooldownTime: '' });
+    } catch (e) { console.error("Save error:", e); }
+    finally { setIsSaving(false); }
   };
 
   if (showAnamnese) {
@@ -456,7 +433,7 @@ export function RunTrackCoachView({ student, onBack }: { student: Student, onBac
                                       </div>
                                    </div>
                                    <div className="bg-black p-4 rounded-xl border border-white/5 italic font-bold text-[10px] md:text-xs text-zinc-400 leading-relaxed">
-                                      "{m.warmupTime} min aquecimento. {m.sets} bloco(s) de {m.reps}x {m.stimulusTime}{isNaN(parseInt(m.stimulusTime)) ? '' : ' min'} de corrida por {m.recoveryTime} segundos de repouso. Finalização de {m.cooldownTime} minutos."
+                                      "{m.warmupTime} min aquecimento inicial. {m.sets} bloco(s) de {m.reps}x {m.stimulusTime}{isNaN(parseInt(m.stimulusTime)) ? '' : ' min'} de corrida por {m.recoveryTime} segundos de repouso. Finalização de {m.cooldownTime} minutos."
                                    </div>
                                    <div className="flex gap-4 mt-4">
                                       {m.pace && <span className="text-[9px] font-black bg-red-500/10 text-red-400 px-2 py-1 rounded-md uppercase border border-red-500/20">Intensidade: {m.pace}</span>}
@@ -464,7 +441,7 @@ export function RunTrackCoachView({ student, onBack }: { student: Student, onBac
                                    </div>
                                 </div>
                              </div>
-                             <button onClick={() => handleDelete(m.id)} className="absolute top-4 right-4 md:static md:p-4 text-zinc-500 hover:text-rose-500 transition-all md:opacity-0 md:group-hover:opacity-100"><Trash2 size={18}/></button>
+                             <button onClick={async () => await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'modelWorkouts', m.id))} className="absolute top-4 right-4 md:static md:p-4 text-zinc-500 hover:text-rose-500 transition-all md:opacity-0 md:group-hover:opacity-100"><Trash2 size={18}/></button>
                            </Card>
                          ))}
                       </div>
@@ -489,19 +466,15 @@ export function RunTrackStudentView({ student, onBack }: { student: Student, onB
   const [showAnamnese, setShowAnamnese] = useState(false);
 
   useEffect(() => {
-      try {
-        // Fetch models
-        const qModels = query(collection(db, 'artifacts', appId, 'public', 'data', 'modelWorkouts'), where('studentId', '==', student.id));
-        const unsubModels = onSnapshot(qModels, (snap) => setModelWorkouts(snap.docs.map(d => ({id: d.id, ...d.data()}))), (e) => console.warn("RT Student Offline - Models"));
-        
-        // Fetch history
-        const qWorkouts = query(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'), where('studentId', '==', student.id));
-        const unsubWorkouts = onSnapshot(qWorkouts, (snap) => setWorkouts(snap.docs.map(d => ({id: d.id, ...d.data()}))), (e) => console.warn("RT Student Offline - History"));
+      // Fetch models
+      const qModels = query(collection(db, 'artifacts', appId, 'public', 'data', 'modelWorkouts'), where('studentId', '==', student.id));
+      const unsubModels = onSnapshot(qModels, (snap) => setModelWorkouts(snap.docs.map(d => ({id: d.id, ...d.data()}))));
+      
+      // Fetch history
+      const qWorkouts = query(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'), where('studentId', '==', student.id));
+      const unsubWorkouts = onSnapshot(qWorkouts, (snap) => setWorkouts(snap.docs.map(d => ({id: d.id, ...d.data()}))));
 
-        return () => { unsubModels(); unsubWorkouts(); };
-      } catch(e) {
-          console.warn("RT Student Init Error", e);
-      }
+      return () => { unsubModels(); unsubWorkouts(); };
   }, [student.id]);
 
   const completedCount = workouts.filter(w => w.completed).length;
@@ -512,7 +485,8 @@ export function RunTrackStudentView({ student, onBack }: { student: Student, onB
     if (!stats.distance || !stats.time) return;
     const pace = parseFloat(stats.time) / parseFloat(stats.distance);
     const kcal = Math.round(10 * parseFloat(student.weight as string || '70') * (parseFloat(stats.time) / 60));
-    const newWorkout = { 
+    
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'), { 
       studentId: student.id, 
       completed: true, 
       realDistance: parseFloat(stats.distance), 
@@ -520,16 +494,7 @@ export function RunTrackStudentView({ student, onBack }: { student: Student, onB
       pace, 
       kcal,
       completedAt: new Date().toISOString()
-    };
-    
-    try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'), newWorkout);
-    } catch (e) {
-        console.warn("Save workout error (Demo Mode)", e);
-        // Fallback for Demo Mode responsiveness
-        setWorkouts(prev => [newWorkout, ...prev]);
-    }
-    
+    });
     setCompleteModal(false);
     setStats({ distance: '', time: '' });
   };
