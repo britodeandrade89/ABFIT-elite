@@ -2,26 +2,26 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Initialize Firebase
-// Using the global config injected in index.html for this demo environment
-const configFromWindow = window.__firebase_config;
-
-// Fallback config to prevent "auth/configuration-not-found" error.
-// This ensures the app can initialize even if the global config is missing,
-// allowing App.tsx to gracefully handle the auth failure and switch to demo mode.
-const firebaseConfig = (configFromWindow && configFromWindow.apiKey) 
-  ? configFromWindow 
-  : {
-      apiKey: "mock-api-key-fallback",
-      authDomain: "mock.firebaseapp.com",
-      projectId: "mock-project",
-      storageBucket: "mock.appspot.com",
+// Helper to get config safely
+const getFirebaseConfig = () => {
+  if (typeof window !== 'undefined' && window.__firebase_config && window.__firebase_config.apiKey) {
+    return window.__firebase_config;
+  }
+  
+  // Return a dummy config to allow app initialization without crashing.
+  // Auth calls will fail gracefully in App.tsx and fallback to Demo mode.
+  return {
+      apiKey: "dummy-api-key",
+      authDomain: "dummy.firebaseapp.com",
+      projectId: "dummy-project",
+      storageBucket: "dummy.appspot.com",
       messagingSenderId: "00000000000",
       appId: "1:00000000000:web:00000000000000"
-    };
+  };
+};
 
-const app = initializeApp(firebaseConfig);
+const app = initializeApp(getFirebaseConfig());
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const appId = window.__app_id || 'abfit-elite-production';
+export const appId = (typeof window !== 'undefined' && window.__app_id) ? window.__app_id : 'abfit-elite-production';

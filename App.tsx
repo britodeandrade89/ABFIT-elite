@@ -1,18 +1,21 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   User as UserIcon, Loader2, Dumbbell, 
-  CheckCircle2, HeartPulse, Trophy, Camera 
+  CheckCircle2, HeartPulse, Trophy, Camera, Brain, Ruler, Footprints, AlertCircle
 } from 'lucide-react';
-import { Logo, Card, BackgroundWrapper, EliteFooter, WeatherWidget } from './components/Layout';
-import { ProfessorDashboard, StudentManagement, WorkoutEditorView, CoachAssessmentView, PeriodizationView, RunningWorkoutManager } from './components/CoachFlow';
-import { WorkoutSessionView, WorkoutCounterView, StudentAssessmentView, RunningDashboard } from './components/StudentFlow';
+import { Logo, BackgroundWrapper, EliteFooter, WeatherWidget, NotificationBadge, SyncStatus } from './components/Layout';
+import { ProfessorDashboard, StudentManagement, WorkoutEditorView, CoachAssessmentView, PeriodizationView, RunTrackManager } from './components/CoachFlow';
+import { WorkoutSessionView, WorkoutCounterView, StudentAssessmentView, CorreRJView, StudentPeriodizationView } from './components/StudentFlow';
+// Fix: Added missing import for RunTrackStudentView to resolve the TS2304 error
+import { RunTrackStudentView } from './components/RunTrack';
 import { InstallPrompt } from './components/InstallPrompt';
 import { collection, query, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { auth, db, appId } from './services/firebase';
-import { Student } from './types';
+import { Student, Workout } from './types';
 
-function LoginScreen({ onLogin, error }: { onLogin: (val: string) => void, error: string }) {
+function LoginScreen({ onLogin, error, isDemo }: { onLogin: (val: string) => void, error: string, isDemo: boolean }) {
   const [input, setInput] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -36,7 +39,15 @@ function LoginScreen({ onLogin, error }: { onLogin: (val: string) => void, error
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center font-sans">
       <div className="animate-in fade-in zoom-in duration-700 text-center"><Logo /></div>
-      <div className="w-full max-w-sm mt-12 space-y-4 animate-in slide-in-from-bottom-10 duration-1000 relative">
+      
+      {isDemo && (
+        <div className="mt-6 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-2 animate-pulse">
+          <AlertCircle size={14} className="text-amber-500" />
+          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Modo Demonstração Ativo (Firestore Offline)</span>
+        </div>
+      )}
+
+      <div className="w-full max-w-sm mt-8 space-y-4 animate-in slide-in-from-bottom-10 duration-1000 relative">
         <div className="space-y-1 text-left">
           <label className="text-[10px] font-black text-zinc-500 ml-4 uppercase tracking-widest text-white">Identificação</label>
           <div className="relative" ref={dropdownRef}>
@@ -67,179 +78,81 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
-
-  // Use o padrão de inicialização segura do Check-in GO
-  useEffect(() => {
-    const registerSW = async () => {
-        if ('serviceWorker' in navigator) {
-            try {
-                // Use relative path ./sw.js to respect current origin and base
-                // Use a non-blocking registration to avoid hanging the main thread
-                navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(err => {
-                    // Suppress errors about origin mismatch or script loading in dev/preview
-                    console.debug("SW Registration suppressed:", err);
-                });
-            } catch (err) {
-                // Silently fail in preview environments
-            }
-        }
-    };
-    registerSW();
-  }, []);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
     const initAuth = async () => { 
-        // Check if we are using the mock API key from index.html or if it's missing
-        const config = window.__firebase_config;
-        const isMock = !config || !config.apiKey || config.apiKey === "mock-api-key";
-
-        if (isMock) {
-            console.warn("ABFIT Elite: Running in DEMO mode (Mock/Missing Config).");
-            if (mounted) {
-              setUser({ uid: "demo-user", isAnonymous: true });
-              setLoading(false);
-            }
-            return;
-        }
-
         try { 
             await signInAnonymously(auth); 
         } catch (err: any) { 
-            if (!mounted) return;
-            console.warn("Firebase Auth Warning: Could not sign in anonymously. Switching to Fallback/Demo User.", err.code);
-            setUser({ uid: "fallback-demo-user", isAnonymous: true });
+            console.warn("Auth Fallback:", err.message);
+            setUser({ uid: "demo-user", isAnonymous: true });
             setLoading(false);
+            setIsDemoMode(true);
         } 
     };
     initAuth();
-    
-    // Only listen to auth changes if not manually set to demo user
     const unsub = onAuthStateChanged(auth, (u) => { 
-        if (u && mounted) {
-            setUser(u); 
-            setLoading(false); 
-        }
+        if (u) { setUser(u); setLoading(false); }
     });
-    return () => {
-      mounted = false;
-      unsub();
-    };
+    return () => unsub();
   }, []);
 
   useEffect(() => {
     if (!user) return;
-    
-    // In demo mode, skipping real Firestore connection if likely to fail
-    if (user.uid === "demo-user" || user.uid === "fallback-demo-user") {
-        setStudents([]);
-        return;
-    }
-
-    try {
-        const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'students'));
-        const unsub = onSnapshot(q, (snapshot) => { 
-            setStudents(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student))); 
-        }, (error) => {
-            console.warn("Firestore snapshot error (expected in demo if rules deny):", error);
-            // Fallback for demo if no backend access
-            setStudents([]); 
-        });
-        return () => unsub();
-    } catch (e) {
-        console.warn("Firestore init error", e);
-        setStudents([]);
-    }
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'students'));
+    const unsub = onSnapshot(q, (snapshot) => { 
+        setStudents(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student))); 
+    }, (error) => {
+        console.warn("Firestore access restricted (Entering Demo Mode):", error.message);
+        setIsDemoMode(true);
+    });
+    return () => unsub();
   }, [user]);
 
   const allStudentsForCoach = useMemo(() => {
     const defaultStudents: Student[] = [
-        { 
-          id: 'fixed-andre', 
-          nome: 'André Brito', 
-          email: 'britodeandrade@gmail.com', 
-          physicalAssessments: [], 
-          weightHistory: [], 
-          workoutHistory: [], 
-          sexo: 'Masculino',
-          workouts: [
-            {
-              id: 'treino-a-fixed',
-              title: 'Treino A',
-              exercises: [
-                { id: 'ex1', name: 'Supino Reto com Barra (Barbell Bench Press)', description: 'Peitoral maior, deltoide anterior, tríceps.' },
-                { id: 'ex2', name: 'Supino Inclinado com Halteres (Incline Dumbbell Press)', description: 'Foco na porção superior do peitoral.' },
-                { id: 'ex3', name: 'Desenvolvimento de Ombro (Overhead Press)', description: 'Ombros e tríceps com força total.' },
-                { id: 'ex4', name: 'Remada Alta (Upright Row) - Modificada', description: 'Trapézio e deltoide lateral.' },
-                { id: 'ex5', name: 'Leg Press (Pernas)', description: 'Quadríceps e glúteos com alta carga.' },
-                { id: 'ex6', name: 'Safety Bar Squat (Agachamento com Barra de Segurança)', description: 'Agachamento seguro para coluna e ombros.' },
-                { id: 'ex7', name: 'Sissy Squat (Agachamento Isolado do Joelho)', description: 'Isolamento extremo de quadríceps.' },
-                { id: 'ex8', name: 'Swiss Ball Crunch (Crunch na Bola Suíça)', description: 'Abdominal com instabilidade.' },
-                { id: 'ex9', name: 'Prancha (Plank)', description: 'Estabilidade do Core.' }
-              ]
-            }
-          ]
-        }, 
+        { id: 'fixed-andre', nome: 'André Brito', email: 'britodeandrade@gmail.com', physicalAssessments: [], weightHistory: [], workoutHistory: [], sexo: 'Masculino', workouts: [] }, 
         { id: 'fixed-marcelly', nome: 'Marcelly Bispo', email: 'marcellybispo92@gmail.com', physicalAssessments: [], weightHistory: [], workoutHistory: [], workouts: [], sexo: 'Feminino' }
     ];
-    // Merge real firebase students with defaults (or override defaults if they exist in DB)
     const merged = [...students];
     defaultStudents.forEach(def => { 
-        if (!merged.find(s => s.id === def.id || s.email === def.email)) merged.push(def); 
+        if (!merged.find(s => s.id === def.id || (s.email && s.email === def.email))) merged.push(def); 
     });
     return merged;
   }, [students]);
 
   const handleLogin = (val: string) => {
     setLoginError('');
+    if (!val) return;
     const cleanVal = val.trim().toLowerCase();
-    if (cleanVal === "professor") { 
-        setView('PROFESSOR_DASH'); 
-        return; 
-    }
-    const student = allStudentsForCoach.find(s => s.email?.trim().toLowerCase() === cleanVal);
-    if (student) { 
-        setSelectedStudent(student); 
-        setView('DASHBOARD'); 
-    } else { 
-        setLoginError('IDENTIFICAÇÃO NÃO RECONHECIDA'); 
-    }
+    if (cleanVal === "professor") { setView('PROFESSOR_DASH'); return; }
+    
+    const student = allStudentsForCoach.find(s => (s.email || "").trim().toLowerCase() === cleanVal);
+    if (student) { setSelectedStudent(student); setView('DASHBOARD'); } 
+    else { setLoginError('IDENTIFICAÇÃO NÃO RECONHECIDA'); }
   };
 
   const handleSaveData = async (sid: string, data: any) => {
-    try { 
-      // Only try to save if not in demo mode with mock user
-      if (user?.uid !== "demo-user" && user?.uid !== "fallback-demo-user") {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', sid);
-          await setDoc(docRef, data, { merge: true });
-      } else {
-        console.log("Demo Mode: Data not saved to backend", data);
-      }
-      
-      // Local state update is critical for demo
-      setStudents(prev => prev.map(s => s.id === sid ? { ...s, ...data } : s));
-      if (selectedStudent && selectedStudent.id === sid) {
-          setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
-      }
-    } catch (e) { 
-        console.error("Save error", e); 
-        // Mock update for demo
-        if (selectedStudent && selectedStudent.id === sid) {
-            setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
-        }
-    }
-  };
+    // Local update always happens first for responsiveness
+    setStudents(prev => prev.map(s => s.id === sid ? { ...s, ...data } : s));
+    if (selectedStudent && selectedStudent.id === sid) setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedStudent) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      handleSaveData(selectedStudent.id, { photoUrl: reader.result });
-    };
-    reader.readAsDataURL(file);
+    if (isDemoMode) {
+        console.log("Demo Mode: Data preserved in local session only.");
+        return;
+    }
+
+    try { 
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', sid);
+      await setDoc(docRef, data, { merge: true });
+    } catch (e: any) { 
+      console.warn("Save Error (Likely Firestore Permission):", e.message); 
+      setIsDemoMode(true);
+    }
   };
 
   if (loading) return <div className="h-screen bg-black flex items-center justify-center text-white"><Loader2 className="animate-spin text-red-600" /></div>;
@@ -247,77 +160,60 @@ export default function App() {
   return (
     <BackgroundWrapper>
       <InstallPrompt />
-      {view === 'LOGIN' && <LoginScreen onLogin={handleLogin} error={loginError} />}
+      {view === 'LOGIN' && <LoginScreen onLogin={handleLogin} error={loginError} isDemo={isDemoMode} />}
       
       {view === 'DASHBOARD' && selectedStudent && (
         <div className="p-6 text-white text-center pt-10 h-screen overflow-y-auto custom-scrollbar">
           <div className="flex justify-between items-start mb-8 text-white">
-             <div className="relative group text-left">
-                <input type="file" id="photo-upload-main" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
-                <label htmlFor="photo-upload-main" className="block cursor-pointer relative text-left">
-                   <div className="w-16 h-16 rounded-[1.5rem] bg-zinc-900 border-2 border-red-600 overflow-hidden shadow-2xl transition-transform active:scale-90 text-left">
-                      {selectedStudent?.photoUrl ? <img src={selectedStudent.photoUrl} className="w-full h-full object-cover" alt="Perfil"/> : <div className="w-full h-full flex items-center justify-center"><UserIcon className="text-zinc-700" /></div>}
-                   </div>
-                   <div className="absolute -bottom-1 -right-1 bg-red-600 rounded-lg p-1 border-2 border-black shadow-lg">
-                      <Camera size={10} className="text-white" />
-                   </div>
-                </label>
+             <div className="w-16 h-16 rounded-[1.5rem] bg-zinc-900 border-2 border-red-600 overflow-hidden shadow-2xl">
+                {selectedStudent?.photoUrl ? <img src={selectedStudent.photoUrl} className="w-full h-full object-cover" alt="Perfil"/> : <div className="w-full h-full flex items-center justify-center"><UserIcon className="text-zinc-700" /></div>}
              </div>
-             <WeatherWidget />
+             <div className="flex flex-col items-end gap-2">
+                <WeatherWidget />
+                <SyncStatus isDemo={isDemoMode} />
+             </div>
           </div>
           <div className="mb-10 text-center"><Logo size="text-6xl" subSize="text-[9px]" /></div>
-          <div className="mt-12 space-y-4 pb-10 text-left text-white">
-            <button onClick={() => setView('WORKOUTS')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-red-600/30">
-                <span className="font-black italic uppercase text-lg group-hover:text-red-600 transition-colors text-white text-left">Meus Treinos</span>
-                <div className="w-12 h-12 bg-red-600/10 rounded-2xl flex items-center justify-center border border-red-500/20 group-hover:bg-red-600 transition-colors shadow-inner text-white">
-                    <Dumbbell className="text-red-600 group-hover:text-white" />
-                </div>
-            </button>
-            <button onClick={() => setView('WORKOUT_COUNTER')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-blue-500/30">
-                <div>
-                    <span className="font-black italic uppercase text-lg group-hover:text-blue-500 transition-colors text-white text-left">Contador de Treinos</span>
-                    <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest mt-1 text-left text-white">Check-in & Consistência</p>
-                </div>
-                <div className="w-12 h-12 bg-blue-600/10 rounded-2xl flex items-center justify-center border border-blue-500/20 group-hover:bg-blue-600 transition-colors shadow-inner text-white">
-                    <CheckCircle2 className="text-blue-600 group-hover:text-white" />
-                </div>
+          
+          <div className="mt-12 space-y-4 pb-20 text-left">
+            <button onClick={() => setView('STUDENT_PERIODIZATION')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between group hover:border-indigo-600/30 transition-all shadow-xl">
+                <div className="flex flex-col items-start"><span className="font-black italic uppercase text-lg group-hover:text-indigo-500 transition-colors">Periodização PhD</span><p className="text-[8px] text-zinc-500 font-bold uppercase">Macrociclo & Planejamento</p></div>
+                <div className="w-12 h-12 bg-indigo-600/10 rounded-2xl flex items-center justify-center border border-indigo-500/20 group-hover:bg-indigo-600 transition-colors"><Brain className="text-indigo-500 group-hover:text-white" /></div>
             </button>
 
-            <button onClick={() => setView('STUDENT_ASSESSMENT')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-rose-500/30">
-                <div>
-                    <span className="font-black italic uppercase text-lg group-hover:text-rose-500 transition-colors text-white text-left">Avaliação Física</span>
-                    <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest mt-1 text-left text-white">Relatório Técnico PhD</p>
-                </div>
-                <div className="w-12 h-12 bg-rose-600/10 rounded-2xl flex items-center justify-center border border-rose-500/20 group-hover:bg-rose-600 transition-colors shadow-inner text-white text-center">
-                    <HeartPulse className="text-rose-500 group-hover:text-white" />
-                </div>
+            <button onClick={() => setView('WORKOUTS')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between group hover:border-red-600/30 transition-all shadow-xl">
+                <div className="flex flex-col items-start"><span className="font-black italic uppercase text-lg group-hover:text-red-600 transition-colors">Meus Treinos</span><p className="text-[8px] text-zinc-500 font-bold uppercase">Sessões de Força & Hipertrofia</p></div>
+                <div className="w-12 h-12 bg-red-600/10 rounded-2xl flex items-center justify-center border border-red-500/20 group-hover:bg-red-600 transition-colors"><Dumbbell className="text-red-600 group-hover:text-white" /></div>
             </button>
-            <button onClick={() => setView('CORRE_RJ')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-orange-500/30">
-                <div className="text-left text-white">
-                    <span className="font-black italic uppercase text-lg group-hover:text-orange-500 transition-colors text-white text-left">correRJ 2026</span>
-                    <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest mt-1 text-left text-white">Agenda de Provas 5k</p>
-                </div>
-                <div className="w-12 h-12 bg-orange-600/10 rounded-2xl flex items-center justify-center border border-orange-500/20 group-hover:bg-orange-600 transition-colors shadow-inner text-center">
-                    <Trophy className="text-orange-600 group-hover:text-white" />
-                </div>
-            </button>
-            <button onClick={() => setView('LOGIN')} className="mt-16 py-4 px-12 border border-white/5 rounded-full text-zinc-700 text-[10px] font-black uppercase tracking-[0.4em] active:bg-zinc-900 transition-all text-white text-center w-full hover:bg-zinc-900 hover:text-white">Sair do Sistema</button>
+
+            <div className="grid grid-cols-2 gap-4">
+              <button onClick={() => setView('STUDENT_ASSESSMENT')} className="bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-800 flex flex-col items-center gap-3 shadow-lg group hover:border-emerald-600/30">
+                <Ruler className="text-emerald-500 group-hover:scale-110 transition-transform" />
+                <span className="font-black italic uppercase text-[10px]">Avaliação</span>
+              </button>
+              <button onClick={() => setView('RUNTRACK_STUDENT')} className="bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-800 flex flex-col items-center gap-3 shadow-lg group hover:border-orange-600/30">
+                <Footprints className="text-orange-500 group-hover:scale-110 transition-transform" />
+                <span className="font-black italic uppercase text-[10px]">RunTrack</span>
+              </button>
+            </div>
+
+            <button onClick={() => setView('LOGIN')} className="mt-16 py-4 border border-white/5 rounded-full text-zinc-700 text-[10px] font-black uppercase tracking-[0.4em] active:bg-zinc-900 transition-all w-full">Sair do Sistema</button>
           </div>
           <EliteFooter />
         </div>
       )}
 
+      {view === 'STUDENT_PERIODIZATION' && selectedStudent && <StudentPeriodizationView student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
       {view === 'WORKOUTS' && selectedStudent && <WorkoutSessionView user={selectedStudent} onBack={() => setView('DASHBOARD')} onSave={handleSaveData} />}
-      {view === 'WORKOUT_COUNTER' && selectedStudent && <WorkoutCounterView student={selectedStudent} onBack={() => setView('DASHBOARD')} onSaveHistory={(h) => handleSaveData(selectedStudent.id, { workoutHistory: h })} />}
       {view === 'STUDENT_ASSESSMENT' && selectedStudent && <StudentAssessmentView student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
-      {view === 'CORRE_RJ' && selectedStudent && <RunningDashboard student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
+      {view === 'RUNTRACK_STUDENT' && selectedStudent && <RunTrackStudentView student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
       
       {view === 'PROFESSOR_DASH' && <ProfessorDashboard students={allStudentsForCoach} onLogout={() => setView('LOGIN')} onSelect={(s) => { setSelectedStudent(s); setView('STUDENT_MGMT'); }} />}
-      {view === 'STUDENT_MGMT' && selectedStudent && <StudentManagement student={selectedStudent} onBack={() => setView('PROFESSOR_DASH')} onNavigate={setView} />}
-      {view === 'PERIODIZATION' && selectedStudent && <PeriodizationView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onProceedToWorkout={() => setView('WORKOUT_EDITOR')} />}
+      {view === 'STUDENT_MGMT' && selectedStudent && <StudentManagement student={selectedStudent} onBack={() => setView('PROFESSOR_DASH')} onNavigate={setView} onEditWorkout={setSelectedWorkout} />}
+      {view === 'PERIODIZATION' && selectedStudent && <PeriodizationView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onProceedToWorkout={() => { setSelectedWorkout(null); setView('WORKOUT_EDITOR'); }} />}
       {view === 'COACH_ASSESSMENT' && selectedStudent && <CoachAssessmentView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onSave={handleSaveData} />}
-      {view === 'WORKOUT_EDITOR' && selectedStudent && <WorkoutEditorView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onSave={handleSaveData} />}
-      {view === 'RUNNING_MANAGER' && selectedStudent && <RunningWorkoutManager student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onSave={handleSaveData} />}
+      {view === 'WORKOUT_EDITOR' && selectedStudent && <WorkoutEditorView student={selectedStudent} workoutToEdit={selectedWorkout} onBack={() => setView('STUDENT_MGMT')} onSave={handleSaveData} />}
+      {view === 'RUNTRACK_ELITE' && selectedStudent && <RunTrackManager student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} />}
     </BackgroundWrapper>
   );
 }

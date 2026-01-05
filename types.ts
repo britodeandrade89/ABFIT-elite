@@ -1,3 +1,4 @@
+
 export interface Exercise {
   id?: string;
   name: string;
@@ -22,20 +23,32 @@ export interface Workout {
   projectedSessions?: number; // Total calculated sessions (e.g., 10)
 }
 
+/**
+ * PeriodizationMicrocycle interface updated to include 'tipo' and 'descricao_carga'
+ */
 export interface PeriodizationMicrocycle {
   semana: number;
+  tipo: string;
   foco: string;
   faixa_repeticoes: string;
   pse_alvo: string;
+  descricao_carga?: string;
 }
 
+/**
+ * PeriodizationPlan interface updated to include technical fields used by AI and StudentFlow
+ */
 export interface PeriodizationPlan {
   id: string;
   titulo: string;
   startDate: string; // ISO String
-  volume_por_grupo: string;
-  detalhes_treino: string;
+  volume_por_grupo?: string;
+  detalhes_treino?: string;
+  modelo_teorico?: string;
+  objetivo_longo_prazo?: string;
+  distribuicao_volume?: string;
   microciclos: PeriodizationMicrocycle[];
+  notas_phd?: string;
   type: 'STRENGTH' | 'RUNNING';
 }
 

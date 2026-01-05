@@ -1,255 +1,159 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { NutritionProfile, MealPlan, MacroNutrients } from "../types";
 
-// Ensure API key is present. Handle environment differences safely.
-const getApiKey = () => {
-  try {
-    if (typeof process !== "undefined" && process.env && process.env.API_KEY) {
-      return process.env.API_KEY;
-    }
-    // Fallback for browser-injected config if process.env isn't replaced by bundler
-    if (typeof window !== "undefined" && (window as any).process?.env?.API_KEY) {
-      return (window as any).process.env.API_KEY;
-    }
-  } catch (e) {
-    console.warn("Error accessing API KEY", e);
-  }
-  return "";
-};
+// Inicialização segura com a chave do ambiente conforme as diretrizes
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const apiKey = getApiKey();
-const ai = new GoogleGenAI({ apiKey });
+// Conforme diretrizes: Pro para tarefas complexas (Periodização), Flash para tarefas básicas
+const MODEL_PRO = 'gemini-3-pro-preview';
+const MODEL_FLASH = 'gemini-3-flash-preview';
+const MODEL_IMAGE = 'gemini-2.5-flash-image';
 
-const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
-const IMAGEN_MODEL = "imagen-4.0-generate-001";
+/**
+ * Gera um plano de periodização científica nível PhD (EEFD/UFRJ)
+ * Utiliza o modelo PRO para maior precisão em raciocínio esportivo complexo.
+ */
+export async function generatePeriodizationPlan(data: any): Promise<any> {
+  // Fix: Removed triple backticks that were breaking the template literal syntax
+  const systemInstruction = `Você é um PhD em Fisiologia do Exercício e mestre em Metodologia do Treinamento de Força.
+  Sua tarefa é criar um MESOCICLO de 4 semanas extremamente técnico e personalizado.
+  
+  CONTEXTO CIENTÍFICO OBRIGATÓRIO:
+  - Aplicação de Matveev (Carga Progressiva) e Bompa (Periodização de Força).
+  - Ajuste de PSE (Percepção Subjetiva de Esforço) conforme a fase.
+  - Otimização de volume conforme a frequência semanal do atleta.
 
-export async function callGemini(prompt: string, systemInstruction: string = "", isJson: boolean = false): Promise<any> {
-  if (!apiKey) {
-    console.warn("API Key is missing for Gemini.");
-    return isJson ? null : "API Key missing.";
-  }
+  REGRAS DE RESPOSTA:
+  - Responda APENAS com o objeto JSON solicitado.
+  - Não use blocos de código markdown.
+  - Use termos técnicos em português do Brasil.`;
+
+  const prompt = `Gere uma periodização para o atleta ${data.name}.
+  Objetivo: ${data.goal}
+  Modelo: ${data.model}
+  Fase: ${data.phase}
+  Frequência: ${data.daysPerWeek} dias por semana
+  Atividade Concorrente: ${data.concurrent ? 'Sim' : 'Não'}
+
+  JSON esperado:
+  {
+    "titulo": "Nome Técnico do Mesociclo",
+    "modelo_teorico": "Explicação breve do modelo aplicado",
+    "objetivo_longo_prazo": "Meta para o final do ciclo",
+    "distribuicao_volume": "Como o volume variará semanalmente",
+    "microciclos": [
+      {
+        "semana": 1,
+        "tipo": "Ordinário/Choque/Recuperação",
+        "foco": "Força/Hipertrofia/RML",
+        "faixa_repeticoes": "Ex: 8-10",
+        "pse_alvo": "Ex: 7-8",
+        "descricao_carga": "Indicação de intensidade"
+      }
+    ],
+    "notas_phd": "Recomendação biomecânica final"
+  }`;
 
   try {
     const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
+      model: MODEL_PRO,
       contents: prompt,
       config: {
-        systemInstruction: systemInstruction || "Você é o PhD Diretor Científico da ABFIT.",
-        responseMimeType: isJson ? "application/json" : "text/plain",
+        systemInstruction,
+        responseMimeType: "application/json",
+        temperature: 0.7,
       }
     });
 
-    if (isJson) {
-      try {
-        let text = response.text || "{}";
-        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        return JSON.parse(text);
-      } catch (e) {
-        console.error("JSON Parse Error", e);
-        return null;
-      }
-    }
-
-    return response.text;
+    // Fix: Access .text as a property, not a method as per SDK guidelines
+    const text = response.text;
+    if (!text) return null;
+    
+    // Fix: Robust JSON parsing after trimming potential whitespace
+    const jsonStr = text.trim();
+    return JSON.parse(jsonStr);
   } catch (error) {
-    console.error("Gemini Error:", error);
-    return isJson ? null : "Erro na ligação PhD.";
-  }
-}
-
-export async function generateExerciseImage(exerciseName: string): Promise<string | null> {
-  if (!apiKey) return null;
-  
-  let biomechanicalRefinement = "Ensuring perfect biomechanics.";
-  const nameLower = exerciseName.toLowerCase();
-
-  if (nameLower.includes("banco 75")) biomechanicalRefinement += " The bench is at a high incline of 75 degrees (almost vertical).";
-  if (nameLower.includes("banco 45")) biomechanicalRefinement += " The bench is at a standard incline of 45 degrees.";
-  if (nameLower.includes("banco declinado")) biomechanicalRefinement += " The bench is declined, head lower than hips.";
-
-  if (nameLower.includes("alternado")) biomechanicalRefinement += " The athlete is performing the movement alternating arms (one up, one down).";
-  if (nameLower.includes("unilateral")) biomechanicalRefinement += " The athlete is performing the movement with only one side/arm/leg active.";
-  if (nameLower.includes("pegada neutra")) biomechanicalRefinement += " Hands palms facing each other (neutral grip).";
-  if (nameLower.includes("pegada supinada")) biomechanicalRefinement += " Palms facing up/forward (supinated grip).";
-  if (nameLower.includes("pegada pronada")) biomechanicalRefinement += " Palms facing down/back (pronated grip).";
-
-  if (nameLower.includes("supino reto") || (nameLower.includes("supino") && nameLower.includes("reto"))) {
-    biomechanicalRefinement += " CRITICAL BIOMECHANICS: Flat Bench Press. The athlete must be LYING COMPLETELY HORIZONTAL and FLAT on a bench. The weights are being pressed directly above the chest. The athlete MUST NOT be sitting or inclined.";
-  } else if (nameLower.includes("supino inclinado")) {
-    biomechanicalRefinement += " CRITICAL BIOMECHANICS: Incline Bench Press. The bench is at a 45-degree angle. The athlete is leaning back on the incline. The dumbbells or barbell are pressed from the upper chest towards the ceiling.";
-  } else if (nameLower.includes("crossover") && nameLower.includes("alta")) {
-    biomechanicalRefinement += " CRITICAL BIOMECHANICS: High-to-Low Cable Crossover. The athlete is standing. The arms move in an arc from a high position to a low-forward position. The hands MUST meet or cross exactly at the level of the NIPPLES (chest level) for maximum pec contraction.";
-  } else if (nameLower.includes("frontal") || nameLower.includes("sobre ombros")) {
-    biomechanicalRefinement += " CRITICAL BIOMECHANICS: Front Squat / Front Rack. The barbell rests on the front shoulders (front rack position), elbows held high and pointing forward. Barbell MUST NOT be on the back.";
-  } else if (nameLower.includes("agachamento livre") || nameLower.includes("back squat")) {
-    biomechanicalRefinement += " Traditional Back Squat. Barbell is resting on the upper back/trapezius.";
-  } else if (nameLower.includes("vela")) {
-    biomechanicalRefinement += " Gymnast style: Athlete is on the floor, raising legs and hips towards the ceiling until vertical (Candlestick position).";
-  }
-
-  const prompt = `Cinema-grade 8k raw photograph of a muscular Black athlete perfectly executing the exercise "${exerciseName}" in a high-end futuristic gym. ${biomechanicalRefinement} Peak muscle contraction, glistening sweat, volumetric lighting, high contrast, wide shot, professional fitness photography.`;
-  
-  try {
-    const response = await ai.models.generateImages({
-        model: IMAGEN_MODEL,
-        prompt: prompt,
-        config: {
-          numberOfImages: 1,
-          outputMimeType: 'image/jpeg',
-          aspectRatio: '16:9',
-        },
-    });
-
-    const base64 = response.generatedImages?.[0]?.image?.imageBytes;
-    return base64 ? `data:image/jpeg;base64,${base64}` : null;
-  } catch (error) {
-    console.error("Imagen Error:", error);
+    console.error("Gemini Periodization Error:", error);
     return null;
   }
 }
 
-// --- Periodization AI ---
-
-export async function generatePeriodizationPlan(studentData: any): Promise<any> {
-  if (!apiKey) return null;
-
-  const isRunning = studentData.type === 'RUNNING';
-
-  const systemPrompt = `Você é um Especialista em ${isRunning ? 'Corrida de Rua' : 'Musculação e Treinamento de Força (EEFD/UFRJ)'}.
-    Foque estritamente na PERIODIZAÇÃO (variáveis de carga).
-    
-    TUDO EM PORTUGUÊS.
-    
-    ESTRUTURA DE RESPOSTA (JSON):
-    1. titulo: Nome do Macrociclo.
-    2. volume_por_grupo: ${isRunning ? 'Volume semanal em KM' : 'Séries totais por GRUPO MUSCULAR por semana'}.
-    3. microciclos: Array de 4 semanas (semana, foco, faixa_repeticoes, pse_alvo).
-    4. detalhes_treino: Texto explicativo detalhado.
-    
-    LÓGICA BASEADA NA CONDIÇÃO:
-    - Sedentário/Voltando: Começo conservador, foco em técnica/volume baixo.
-    - Estagnado: Choque de volume/metodologia.
-    - Alta Performance: Intensidade próxima da falha ou pace alto.
-  `;
-
-  const userQuery = `Gere uma periodização de 4 semanas para ${studentData.name}.
-    Tipo: ${isRunning ? 'CORRIDA' : 'MUSCULAÇÃO'}
-    Objetivo: ${studentData.goal}.
-    Ritmo/Condição Atual: ${studentData.regularity}.
-    ${!isRunning ? `Divisão de Treino: ${studentData.splitPreference}.` : ''}
-    Dias por semana: ${studentData.daysPerWeek}.`;
-
-  // Strategy 1: Explicit Schema (Preferred)
+/**
+ * Gera uma imagem para o exercício especificado usando o modelo de imagem nano banana
+ */
+export async function generateExerciseImage(exerciseName: string): Promise<string | null> {
   try {
     const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: userQuery,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ["titulo", "volume_por_grupo", "microciclos", "detalhes_treino"],
-          properties: {
-            titulo: { type: Type.STRING },
-            volume_por_grupo: { type: Type.STRING },
-            microciclos: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                required: ["semana", "foco", "faixa_repeticoes", "pse_alvo"],
-                properties: {
-                  semana: { type: Type.NUMBER },
-                  foco: { type: Type.STRING },
-                  faixa_repeticoes: { type: Type.STRING, description: isRunning ? "Ex: Z2 60% ou Pace" : "Ex: 8-12 reps" },
-                  pse_alvo: { type: Type.STRING }
-                }
-              }
-            },
-            detalhes_treino: { type: Type.STRING }
-          }
+      model: MODEL_IMAGE,
+      contents: { parts: [{ text: `Cinematic high-detail action shot of an athlete performing ${exerciseName} correctly in a professional training facility, dramatic lighting` }] },
+      config: { imageConfig: { aspectRatio: "16:9" } }
+    });
+    
+    // Fix: Iterating through candidates and parts to find the image part as per nano banana guidelines
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          return `data:image/png;base64,${part.inlineData.data}`;
         }
       }
+    }
+    return null;
+  } catch (e) { 
+    console.error("Image Gen Error:", e);
+    return null; 
+  }
+}
+
+/**
+ * Fornece uma instrução biomecânica crucial (cue técnico)
+ */
+export async function generateTechnicalCue(exerciseName: string) {
+  try {
+    const res = await ai.models.generateContent({
+      model: MODEL_FLASH,
+      contents: { parts: [{ text: `Forneça uma instrução biomecânica crucial (cue técnico) para o exercício: ${exerciseName}` }] },
+      config: { systemInstruction: "Você é um treinador de elite especialista em biomecânica." }
     });
-
-    let text = response.text || "{}";
-    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(text);
-  } catch (error) {
-    console.warn("Schema generation failed, retrying with raw JSON...", error);
-    
-    // Strategy 2: Fallback to Raw JSON (Robustness)
-    try {
-        const response = await ai.models.generateContent({
-            model: GEMINI_MODEL,
-            contents: userQuery,
-            config: {
-                systemInstruction: systemPrompt + " IMPORTANTE: Retorne APENAS um JSON válido. Sem markdown.",
-                responseMimeType: "application/json"
-            }
-        });
-        
-        let text = response.text || "{}";
-        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        const json = JSON.parse(text);
-        
-        // Basic Validation
-        if (!json.titulo || !json.microciclos) throw new Error("Invalid JSON structure in fallback");
-        return json;
-    } catch (e2) {
-        console.error("Periodization Fatal Error:", e2);
-        return null;
-    }
-  }
+    // Fix: Access .text as a property
+    return res.text || "Mantenha o controle do movimento.";
+  } catch (e) { return "Mantenha o core ativado e a execução controlada."; }
 }
 
-// --- Nutrition AI Functions ---
-
+/**
+ * Gera um plano alimentar AI baseado no perfil do usuário
+ */
 export async function generateAIMealPlan(profile: NutritionProfile): Promise<MealPlan | null> {
-  const prompt = `
-    Generate a one-day meal plan for a client with the following profile:
-    Goal: ${profile.goal}
-    Restrictions: ${profile.restrictions || "None"}
-    
-    Return a JSON object with this structure:
-    {
-      "breakfast": "Description of meal",
-      "lunch": "Description of meal",
-      "dinner": "Description of meal",
-      "snacks": "Description of snacks",
-      "targetMacros": {
-        "calories": number,
-        "protein": number (grams),
-        "carbs": number (grams),
-        "fat": number (grams)
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL_FLASH,
+      contents: { parts: [{ text: `Crie um plano alimentar para o objetivo: ${profile.goal}. Alvos: ${JSON.stringify(profile.dailyTargets)}` }] },
+      config: { 
+        systemInstruction: "Você é um nutricionista esportivo. Retorne um JSON de plano alimentar.",
+        responseMimeType: "application/json" 
       }
-    }
-  `;
-  
-  const data = await callGemini(prompt, "You are a world-class Sports Nutritionist.", true);
-  if (data) {
-    return {
-      id: Date.now().toString(),
-      generatedDate: new Date().toISOString(),
-      goal: profile.goal,
-      ...data
-    };
-  }
-  return null;
+    });
+    // Fix: Access .text as a property and handle JSON parsing safely
+    const text = response.text;
+    return text ? JSON.parse(text.trim()) : null;
+  } catch (e) { return null; }
 }
 
-export async function estimateFoodMacros(foodDescription: string): Promise<MacroNutrients | null> {
-  const prompt = `
-    Analyze the nutritional content of the following food/meal: "${foodDescription}".
-    Estimate the macronutrients.
-    Return ONLY a JSON object:
-    {
-      "calories": number,
-      "protein": number,
-      "carbs": number,
-      "fat": number
-    }
-  `;
-  
-  return await callGemini(prompt, "You are a precise nutrition analyzer.", true);
+/**
+ * Estima macronutrientes para um alimento específico
+ */
+export async function estimateFoodMacros(food: string): Promise<MacroNutrients | null> {
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL_FLASH,
+      contents: { parts: [{ text: `Estime macronutrientes para: ${food}` }] },
+      config: { 
+        systemInstruction: "Você é um especialista em nutrição. Retorne JSON com calorias, proteinas, carboidratos e gorduras.",
+        responseMimeType: "application/json" 
+      }
+    });
+    // Fix: Access .text as a property and handle JSON parsing safely
+    const text = response.text;
+    return text ? JSON.parse(text.trim()) : null;
+  } catch (e) { return null; }
 }
