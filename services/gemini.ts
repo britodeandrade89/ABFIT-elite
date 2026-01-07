@@ -2,8 +2,16 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { NutritionProfile, MealPlan, MacroNutrients } from "../types";
 
-// Inicialização segura conforme diretrizes
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Helper para obter a chave de forma segura no ambiente browser/vite
+const getApiKey = () => {
+  // @ts-ignore
+  if (typeof process !== 'undefined' && process.env?.API_KEY) return process.env.API_KEY;
+  // @ts-ignore
+  if (typeof window !== 'undefined' && window.process?.env?.API_KEY) return window.process.env.API_KEY;
+  return "";
+};
+
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 const GEMINI_COMPLEX_MODEL = "gemini-3-pro-preview";
 const GEMINI_FAST_MODEL = "gemini-3-flash-preview";
