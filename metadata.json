@@ -1,6 +1,6 @@
 {
   "name": "ABFIT Elite",
-  "description": "Consolidated High Performance Fitness System",
+  "description": "A high-performance fitness assessment and workout management system for coaches and athletes, featuring AI-powered workout prescription and biomechanical analysis.",
   "requestFramePermissions": [
     "geolocation"
   ]

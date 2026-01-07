@@ -1,7 +1,7 @@
 {
   "name": "abfit-elite",
   "private": true,
-  "version": "1.8.6",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,16 +10,25 @@
   },
   "dependencies": {
     "@google/genai": "^1.34.0",
-    "firebase": "^10.7.1",
-    "lucide-react": "^0.450.0",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "recharts": "^2.13.0"
+    "firebase": "^12.7.0",
+    "lucide-react": "^0.562.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "recharts": "^2.15.0"
+  },
+  "overrides": {
+    "recharts": {
+      "react": "^19.2.3",
+      "react-dom": "^19.2.3"
+    }
   },
   "devDependencies": {
-    "@types/react": "^18.3.1",
-    "@types/react-dom": "^18.3.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
     "typescript": "^5.2.2",
     "vite": "^5.3.1"
   }

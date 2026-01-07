@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { CloudRain, Sun, Droplets, RefreshCw, Bell, MapPin, Navigation, Info } from 'lucide-react';
+import { CloudRain, Sun, Droplets, RefreshCw, Bell, MapPin, Navigation } from 'lucide-react';
 import { AppNotification } from '../types';
 
 export function Logo({ size = "text-8xl", subSize = "text-[10px]" }: { size?: string, subSize?: string }) {
@@ -42,24 +41,18 @@ export function EliteFooter() {
   );
 }
 
-export function SyncStatus({ isDemo }: { isDemo?: boolean }) {
+export function SyncStatus() {
   const [synced, setSynced] = useState(true);
 
   useEffect(() => {
-    if (isDemo) return;
     setSynced(false);
     const t = setTimeout(() => setSynced(true), 1500);
     return () => clearTimeout(t);
-  }, [isDemo]);
+  }, []);
 
   return (
-    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border backdrop-blur-md transition-all ${isDemo ? 'bg-amber-500/10 border-amber-500/30' : 'bg-black/40 border-white/5'}`}>
-       {isDemo ? (
-         <>
-           <Info size={10} className="text-amber-500" />
-           <span className="text-[8px] font-black uppercase text-amber-500">Demo</span>
-         </>
-       ) : synced ? (
+    <div className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full border border-white/5 backdrop-blur-md">
+       {synced ? (
          <>
            <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]"></div>
            <span className="text-[8px] font-black uppercase text-zinc-400">Online</span>
