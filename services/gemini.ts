@@ -1,13 +1,23 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { NutritionProfile, MealPlan, MacroNutrients } from "../types";
 
-// Helper para obter a chave de forma segura no ambiente browser/vite
+// Declare process for TS compatibility
+declare const process: any;
+
+// Helper para obter a chave de forma segura no ambiente browser/vite/render
 const getApiKey = () => {
-  // @ts-ignore
-  if (typeof process !== 'undefined' && process.env?.API_KEY) return process.env.API_KEY;
-  // @ts-ignore
-  if (typeof window !== 'undefined' && window.process?.env?.API_KEY) return window.process.env.API_KEY;
+  // 1. Prioridade: Variável de Ambiente do Vite (Render / .env)
+  // Casting import.meta para any para evitar erros de TS se types não estiverem configurados
+  const viteEnv = (import.meta as any).env;
+  if (viteEnv && viteEnv.VITE_GEMINI_API_KEY) {
+    return viteEnv.VITE_GEMINI_API_KEY;
+  }
+
+  // 2. Fallback: Polyfill window.process (definido no index.html)
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    return process.env.API_KEY;
+  }
+  
   return "";
 };
 
