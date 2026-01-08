@@ -8,13 +8,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Serve os arquivos da pasta dist (onde o Vite gera o build)
-// IMPORTANTE: Servir a raiz (__dirname) quebraria o app pois o navegador não lê .tsx
-app.use(express.static(path.join(__dirname, 'dist')));
+// Importante: Servir a pasta 'dist' onde o Vite gera o build final.
+// Servir a raiz (__dirname) faria o navegador receber arquivos .tsx que ele não consegue ler.
+const distPath = path.join(__dirname, 'dist');
+app.use(express.static(distPath));
 
-// Rota para qualquer outra página cair no index.html (importante para React)
+// Rota SPA: Redireciona tudo para o index.html dentro de dist
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 app.listen(port, () => {
