@@ -14,6 +14,11 @@ const getApiKey = () => {
   }
 
   // 2. Fallback: Polyfill window.process (definido no index.html)
+  if (typeof window !== 'undefined' && (window as any).process && (window as any).process.env && (window as any).process.env.API_KEY) {
+    return (window as any).process.env.API_KEY;
+  }
+
+  // 3. Legacy check
   if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
     return process.env.API_KEY;
   }
@@ -75,9 +80,10 @@ export async function generatePeriodizationPlan(data: any): Promise<any> {
       "notas_phd": "Fundamentação científica detalhada"
     }`;
 
-  try {
+  // Função interna para tentar gerar com um modelo específico
+  const tryGenerate = async (modelName: string) => {
     const response = await ai.models.generateContent({
-      model: GEMINI_COMPLEX_MODEL,
+      model: modelName,
       contents: prompt,
       config: {
         systemInstruction,
@@ -88,9 +94,21 @@ export async function generatePeriodizationPlan(data: any): Promise<any> {
     const text = response.text;
     if (!text) throw new Error("Resposta vazia da IA");
     return JSON.parse(text.replace(/```json/g, "").replace(/```/g, "").trim());
+  };
+
+  try {
+    // Tenta primeiro o modelo Pro (Mais inteligente)
+    console.log("Tentando gerar periodização com", GEMINI_COMPLEX_MODEL);
+    return await tryGenerate(GEMINI_COMPLEX_MODEL);
   } catch (error) {
-    console.error("Gemini Periodization Error:", error);
-    return null;
+    console.warn(`Erro com ${GEMINI_COMPLEX_MODEL}, tentando fallback para ${GEMINI_FAST_MODEL}.`, error);
+    try {
+      // Fallback para o modelo Flash (Mais rápido e estável)
+      return await tryGenerate(GEMINI_FAST_MODEL);
+    } catch (fallbackError) {
+      console.error("Gemini Periodization Fatal Error:", fallbackError);
+      return null;
+    }
   }
 }
 
@@ -109,7 +127,8 @@ export async function callGemini(prompt: string, systemInstruction: string = "",
     }
     return response.text;
   } catch (error) {
-    return isJson ? null : "Erro na conexão.";
+    console.error("Call Gemini Error:", error);
+    return isJson ? null : "Erro na conexão com IA.";
   }
 }
 
@@ -125,7 +144,10 @@ export async function generateExerciseImage(exerciseName: string): Promise<strin
       if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
     }
     return null;
-  } catch (e) { return null; }
+  } catch (e) { 
+    console.error("Image Generation Error:", e);
+    return null; 
+  }
 }
 
 export async function generateBioInsight(student: any) {
