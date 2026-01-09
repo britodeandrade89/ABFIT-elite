@@ -1,18 +1,17 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   User as UserIcon, Loader2, Dumbbell, 
   CheckCircle2, HeartPulse, Trophy, Camera 
 } from 'lucide-react';
 import { Logo, BackgroundWrapper, EliteFooter, WeatherWidget, NotificationBadge } from './components/Layout';
-// Fix: Removed non-existent export 'RunningWorkoutManager' from components/CoachFlow
 import { ProfessorDashboard, StudentManagement, WorkoutEditorView, CoachAssessmentView, PeriodizationView } from './components/CoachFlow';
 import { WorkoutSessionView, WorkoutCounterView, StudentAssessmentView, CorreRJView } from './components/StudentFlow';
+import { RunTrackCoachView } from './components/RunTrack';
 import { InstallPrompt } from './components/InstallPrompt';
 import { collection, query, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { auth, db, appId } from './services/firebase';
-import { Student } from './types';
+import { Student, Workout } from './types';
 
 function LoginScreen({ onLogin, error }: { onLogin: (val: string) => void, error: string }) {
   const [input, setInput] = useState('');
@@ -71,6 +70,7 @@ export default function App() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
+  const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null);
 
   // Use o padrão de inicialização segura do Check-in GO
   useEffect(() => {
@@ -287,11 +287,11 @@ export default function App() {
       {view === 'CORRE_RJ' && selectedStudent && <CorreRJView onBack={() => setView('DASHBOARD')} />}
       
       {view === 'PROFESSOR_DASH' && <ProfessorDashboard students={allStudentsForCoach} onLogout={() => setView('LOGIN')} onSelect={(s) => { setSelectedStudent(s); setView('STUDENT_MGMT'); }} />}
-      {view === 'STUDENT_MGMT' && selectedStudent && <StudentManagement student={selectedStudent} onBack={() => setView('PROFESSOR_DASH')} onNavigate={setView} />}
-      {view === 'PERIODIZATION' && selectedStudent && <PeriodizationView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onProceedToWorkout={() => setView('WORKOUT_EDITOR')} />}
+      {view === 'STUDENT_MGMT' && selectedStudent && <StudentManagement student={selectedStudent} onBack={() => setView('PROFESSOR_DASH')} onNavigate={setView} onEditWorkout={setEditingWorkout} />}
+      {view === 'PERIODIZATION' && selectedStudent && <PeriodizationView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onProceedToWorkout={() => { setEditingWorkout(null); setView('WORKOUT_EDITOR'); }} />}
       {view === 'COACH_ASSESSMENT' && selectedStudent && <CoachAssessmentView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onSave={handleSaveData} />}
-      {view === 'WORKOUT_EDITOR' && selectedStudent && <WorkoutEditorView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onSave={handleSaveData} />}
-      {/* Fix: Removed non-existent component 'RunningWorkoutManager' usage */}
+      {view === 'WORKOUT_EDITOR' && selectedStudent && <WorkoutEditorView student={selectedStudent} workoutToEdit={editingWorkout} onBack={() => setView('STUDENT_MGMT')} onSave={handleSaveData} />}
+      {view === 'RUN_TRACK_COACH' && selectedStudent && <RunTrackCoachView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} />}
     </BackgroundWrapper>
   );
 }
