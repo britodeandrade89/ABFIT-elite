@@ -5,16 +5,16 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
-    // CRÍTICO: Mantém os nomes dos arquivos previsíveis
+    // CRÍTICO: Gera arquivos na raiz de 'dist' em vez de subpasta 'assets'
     rollupOptions: {
       output: {
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name].[ext]'
+        assetFileNames: '[name].[ext]',
+        chunkFileNames: '[name].js',
+        entryFileNames: '[name].js'
       }
     }
   },
-  // CRÍTICO: Define a base para produção
+  // CRÍTICO: Define base como './' para caminhos relativos
   base: './',
   server: {
     port: 3000
