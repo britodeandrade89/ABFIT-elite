@@ -1,17 +1,21 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  plugins: [react()],
   build: {
     outDir: 'dist',
-    assetsDir: 'assets',
+    // CRÍTICO: Mantém os nomes dos arquivos previsíveis
     rollupOptions: {
       output: {
-        assetFileNames: 'assets/[name]-[hash][extname]',
-        chunkFileNames: 'assets/[name]-[hash].js',
-        entryFileNames: 'assets/[name]-[hash].js'
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]'
       }
     }
   },
+  // CRÍTICO: Define a base para produção
+  base: './',
   server: {
     port: 3000
   }

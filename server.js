@@ -9,67 +9,70 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 10000;
 
-// Caminho para a pasta dist (onde o Vite coloca os arquivos buildados)
-const distPath = path.join(__dirname, 'dist');
+// Verifica TODAS as possíveis pastas de build
+const possiblePaths = [
+    path.join(__dirname, 'dist'),
+    path.join(__dirname, 'build'),
+    path.join(__dirname, 'public'),
+    __dirname
+];
 
-// Log para debug
-console.log('🚀 Iniciando servidor...');
-console.log('📁 Pasta dist:', distPath);
-
-if (fs.existsSync(distPath)) {
-    console.log('✅ Pasta dist encontrada!');
-    console.log('📋 Conteúdo:', fs.readdirSync(distPath));
-} else {
-    console.log('❌ ERRO: Pasta dist não encontrada!');
-    console.log('📁 Diretório atual:', __dirname);
-    console.log('📋 Conteúdo do diretório:', fs.readdirSync(__dirname));
+let staticPath = null;
+for (const p of possiblePaths) {
+    if (fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html'))) {
+        staticPath = p;
+        console.log(`✅ Usando pasta: ${p}`);
+        console.log(`📁 Conteúdo:`, fs.readdirSync(p));
+        break;
+    }
 }
 
-// **CRÍTICO: Servir arquivos estáticos ANTES de qualquer coisa**
-// Isso evita que arquivos .js/.css sejam tratados como rotas
-app.use(express.static(distPath, {
-    // Força o MIME type correto para arquivos JavaScript
+if (!staticPath) {
+    console.log('❌ ERRO: Nenhuma pasta com index.html encontrada!');
+    console.log('📁 Diretório atual:', __dirname);
+    console.log('📋 Conteúdo:', fs.readdirSync(__dirname));
+    process.exit(1);
+}
+
+// Serve todos os arquivos estáticos
+app.use(express.static(staticPath, {
+    // Configuração EXTRA para garantir MIME types corretos
     setHeaders: (res, filePath) => {
-        const extname = path.extname(filePath);
-        if (extname === '.js') {
-            res.setHeader('Content-Type', 'application/javascript');
-        } else if (extname === '.css') {
-            res.setHeader('Content-Type', 'text/css');
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeTypes = {
+            '.js': 'application/javascript',
+            '.css': 'text/css',
+            '.html': 'text/html',
+            '.json': 'application/json',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.svg': 'image/svg+xml'
+        };
+        if (mimeTypes[ext]) {
+            res.setHeader('Content-Type', mimeTypes[ext]);
         }
     }
 }));
 
-// **IMPORTANTE: Rota específica para o index.html**
-app.get('/', (req, res) => {
-    const indexPath = path.join(distPath, 'index.html');
-    if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-    } else {
-        res.status(404).send('index.html não encontrado');
-    }
-});
-
-// **ROTA CATCH-ALL APENAS para SPA (Single Page Application)**
-// Esta deve ser a ÚLTIMA rota
+// Rota para todas as páginas (SPA)
 app.get('*', (req, res) => {
-    // Verifica se a requisição é para um arquivo (tem extensão)
-    const hasExtension = path.extname(req.path) !== '';
-    
-    if (!hasExtension) {
-        // Se não tem extensão, é uma rota do React/Vue
-        const indexPath = path.join(distPath, 'index.html');
-        if (fs.existsSync(indexPath)) {
-            res.sendFile(indexPath);
+    // Verifica se é uma requisição para arquivo de asset
+    const ext = path.extname(req.path).toLowerCase();
+    if (['.js', '.css', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.json'].includes(ext)) {
+        // Se for um arquivo que não existe, retorna 404
+        const filePath = path.join(staticPath, req.path);
+        if (fs.existsSync(filePath)) {
+            res.sendFile(filePath);
         } else {
-            res.status(404).send('Página não encontrada');
+            console.log(`❌ Arquivo não encontrado: ${req.path}`);
+            res.status(404).send('Arquivo não encontrado');
         }
     } else {
-        // Se tem extensão (.js, .css, .png, etc.) mas não foi encontrado
-        res.status(404).send('Arquivo não encontrado');
+        // Se não for arquivo, serve o index.html
+        res.sendFile(path.join(staticPath, 'index.html'));
     }
 });
 
 app.listen(port, '0.0.0.0', () => {
-    console.log(`✅ Servidor rodando na porta ${port}`);
-    console.log(`🌐 Acesse: http://localhost:${port}`);
+    console.log(`🚀 Servidor rodando em http://0.0.0.0:${port}`);
 });
