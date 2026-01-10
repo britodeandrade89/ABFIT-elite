@@ -434,7 +434,8 @@ export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { 
     exercises: [],
     startDate: new Date().toLocaleDateString('pt-BR'),
     endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR'),
-    frequencyWeekly: 3
+    frequencyWeekly: 3,
+    studentId: student.id // Ensure ID is initialized
   });
 
   const [selectedMuscle, setSelectedMuscle] = useState("Peito");
@@ -458,13 +459,16 @@ export function WorkoutEditorView({ student, workoutToEdit, onBack, onSave }: { 
 
   const handleSave = () => {
     const existingWorkouts = student.workouts || [];
-    const workoutIndex = existingWorkouts.findIndex(w => w.id === currentWorkout.id);
+    // Force studentId before saving
+    const workoutToSave = { ...currentWorkout, studentId: student.id };
+    
+    const workoutIndex = existingWorkouts.findIndex(w => w.id === workoutToSave.id);
     let updatedWorkouts;
     if (workoutIndex >= 0) {
       updatedWorkouts = [...existingWorkouts];
-      updatedWorkouts[workoutIndex] = currentWorkout;
+      updatedWorkouts[workoutIndex] = workoutToSave;
     } else {
-      updatedWorkouts = [...existingWorkouts, currentWorkout];
+      updatedWorkouts = [...existingWorkouts, workoutToSave];
     }
     onSave(student.id, { workouts: updatedWorkouts });
     onBack();

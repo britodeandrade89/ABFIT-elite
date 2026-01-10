@@ -1,7 +1,7 @@
 {
   "name": "abfit-elite",
   "private": true,
-  "version": "1.9.1",
+  "version": "1.9.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,8 @@
     "lucide-react": "latest",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^2.13.0"
+    "recharts": "^2.13.0",
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.1",

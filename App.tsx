@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   User as UserIcon, Loader2, Dumbbell, 
-  CheckCircle2, HeartPulse, Trophy, Camera 
+  CheckCircle2, HeartPulse, Trophy, Camera, LayoutDashboard 
 } from 'lucide-react';
 import { Logo, BackgroundWrapper, EliteFooter, WeatherWidget, NotificationBadge } from './components/Layout';
 import { ProfessorDashboard, StudentManagement, WorkoutEditorView, CoachAssessmentView, PeriodizationView } from './components/CoachFlow';
 import { WorkoutSessionView, WorkoutCounterView, StudentAssessmentView, CorreRJView } from './components/StudentFlow';
 import { RunTrackCoachView } from './components/RunTrack';
+import { NutritionView } from './components/Nutrition';
+import { AnalyticsDashboard } from './components/Analytics';
+import PerfilAluno from './components/PerfilAluno';
 import { InstallPrompt } from './components/InstallPrompt';
 import { collection, query, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { auth, db, appId } from './services/firebase';
 import { Student, Workout } from './types';
+import { useAppStore } from './store';
 
 function LoginScreen({ onLogin, error }: { onLogin: (val: string) => void, error: string }) {
   const [input, setInput] = useState('');
@@ -66,8 +70,16 @@ function LoginScreen({ onLogin, error }: { onLogin: (val: string) => void, error
 export default function App() {
   const [view, setView] = useState('LOGIN');
   const [user, setUser] = useState<any>(null);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  
+  // ZUSTAND INTEGRATION
+  const { students, setStudents, updateStudent, initDefaults } = useAppStore();
+  
+  // Derived State for Selection
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const selectedStudent = useMemo(() => 
+    students.find(s => s.id === selectedStudentId) || null
+  , [students, selectedStudentId]);
+
   const [loading, setLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
   const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null);
@@ -82,6 +94,9 @@ export default function App() {
         }
     };
     registerSW();
+    
+    // Ensure default students exist in store (persisted)
+    initDefaults();
   }, []);
 
   useEffect(() => {
@@ -110,57 +125,26 @@ export default function App() {
     };
   }, []);
 
+  // Firebase Sync (Optional / Enhancement)
   useEffect(() => {
-    if (!user) return;
-    
-    // In demo mode
-    if (user.uid === "demo-user") {
-        setStudents([]);
-        return;
-    }
+    if (!user || user.uid === "demo-user") return;
 
     try {
         const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'students'));
         const unsub = onSnapshot(q, (snapshot) => { 
-            setStudents(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student))); 
+            const fbStudents = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+            // Only update store if we actually got data (prevents wiping local data if FB is empty/broken)
+            if (fbStudents.length > 0) {
+              setStudents(fbStudents);
+            }
         }, (error) => {
-            console.warn("Firestore access denied, switching to demo data.", error);
-            setStudents([]); 
+            console.warn("Firestore access denied, using local storage.", error);
         });
         return () => unsub();
     } catch (e) {
         console.warn("Firestore error", e);
-        setStudents([]);
     }
   }, [user]);
-
-  const allStudentsForCoach = useMemo(() => {
-    const defaultStudents: Student[] = [
-        { 
-          id: 'fixed-andre', 
-          nome: 'André Brito', 
-          email: 'britodeandrade@gmail.com', 
-          physicalAssessments: [], 
-          weightHistory: [], 
-          workoutHistory: [], 
-          sexo: 'Masculino',
-          workouts: [
-            {
-              id: 'treino-a-fixed',
-              title: 'Treino A',
-              exercises: [] // EMPTY EXERCISES as requested for Andre
-            }
-          ]
-        }, 
-        { id: 'fixed-marcelly', nome: 'Marcelly Bispo', email: 'marcellybispo92@gmail.com', physicalAssessments: [], weightHistory: [], workoutHistory: [], workouts: [], sexo: 'Feminino' }
-    ];
-    // Merge real firebase students with defaults (or override defaults if they exist in DB)
-    const merged = [...students];
-    defaultStudents.forEach(def => { 
-        if (!merged.find(s => s.id === def.id || s.email === def.email)) merged.push(def); 
-    });
-    return merged;
-  }, [students]);
 
   const handleLogin = (val: string) => {
     setLoginError('');
@@ -169,9 +153,12 @@ export default function App() {
         setView('PROFESSOR_DASH'); 
         return; 
     }
-    const student = allStudentsForCoach.find(s => s.email?.trim().toLowerCase() === cleanVal);
+    
+    // Find in Store
+    const student = students.find(s => s.email?.trim().toLowerCase() === cleanVal);
+    
     if (student) { 
-        setSelectedStudent(student); 
+        setSelectedStudentId(student.id);
         setView('DASHBOARD'); 
     } else { 
         setLoginError('IDENTIFICAÇÃO NÃO RECONHECIDA'); 
@@ -180,15 +167,13 @@ export default function App() {
 
   const handleSaveData = async (sid: string, data: any) => {
     try { 
+      // 1. Update Local Store (Instant & Persistent)
+      updateStudent(sid, data);
+
+      // 2. Try Update Firebase (Background)
       if (user?.uid !== "demo-user") {
           const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', sid);
           await setDoc(docRef, data, { merge: true });
-      }
-      
-      // Optimistic Update
-      setStudents(prev => prev.map(s => s.id === sid ? { ...s, ...data } : s));
-      if (selectedStudent && selectedStudent.id === sid) {
-          setSelectedStudent(prev => prev ? { ...prev, ...data } : null);
       }
     } catch (e) { 
         console.error("Save error", e); 
@@ -200,7 +185,7 @@ export default function App() {
     if (!file || !selectedStudent) return;
     const reader = new FileReader();
     reader.onloadend = () => {
-      handleSaveData(selectedStudent.id, { photoUrl: reader.result });
+      handleSaveData(selectedStudent.id, { photoUrl: reader.result as string });
     };
     reader.readAsDataURL(file);
   };
@@ -240,20 +225,34 @@ export default function App() {
              <WeatherWidget />
           </div>
           <div className="mb-10 text-center"><Logo size="text-6xl" subSize="text-[9px]" /></div>
+          
+          {/* Main Menu Grid */}
           <div className="mt-12 space-y-4 pb-10 text-left text-white">
+            
+            {/* NOVO BOTÃO: PERFIL DO ALUNO */}
+            <button onClick={() => setView('PERFIL_ALUNO')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-blue-600/30 mb-2">
+                <div>
+                    <span className="font-black italic uppercase text-lg group-hover:text-blue-500 transition-colors text-white text-left">Perfil & Relógio</span>
+                    <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest mt-1 text-left text-white">Integração Galaxy Watch</p>
+                </div>
+                <div className="w-12 h-12 bg-blue-600/10 rounded-2xl flex items-center justify-center border border-blue-500/20 group-hover:bg-blue-600 transition-colors shadow-inner text-white">
+                    <LayoutDashboard className="text-blue-600 group-hover:text-white" />
+                </div>
+            </button>
+
             <button onClick={() => setView('WORKOUTS')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-red-600/30">
                 <span className="font-black italic uppercase text-lg group-hover:text-red-600 transition-colors text-white text-left">Meus Treinos</span>
                 <div className="w-12 h-12 bg-red-600/10 rounded-2xl flex items-center justify-center border border-red-500/20 group-hover:bg-red-600 transition-colors shadow-inner text-white">
                     <Dumbbell className="text-red-600 group-hover:text-white" />
                 </div>
             </button>
-            <button onClick={() => setView('WORKOUT_COUNTER')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-blue-500/30">
+            <button onClick={() => setView('WORKOUT_COUNTER')} className="w-full bg-zinc-900 p-7 rounded-[3rem] border border-zinc-800 flex items-center justify-between text-white active:scale-95 transition-all shadow-xl group text-left hover:border-emerald-500/30">
                 <div>
-                    <span className="font-black italic uppercase text-lg group-hover:text-blue-500 transition-colors text-white text-left">Contador de Treinos</span>
+                    <span className="font-black italic uppercase text-lg group-hover:text-emerald-500 transition-colors text-white text-left">Contador de Treinos</span>
                     <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest mt-1 text-left text-white">Check-in & Consistência</p>
                 </div>
-                <div className="w-12 h-12 bg-blue-600/10 rounded-2xl flex items-center justify-center border border-blue-500/20 group-hover:bg-blue-600 transition-colors shadow-inner text-white">
-                    <CheckCircle2 className="text-blue-600 group-hover:text-white" />
+                <div className="w-12 h-12 bg-emerald-600/10 rounded-2xl flex items-center justify-center border border-emerald-500/20 group-hover:bg-emerald-600 transition-colors shadow-inner text-white">
+                    <CheckCircle2 className="text-emerald-600 group-hover:text-white" />
                 </div>
             </button>
 
@@ -281,12 +280,14 @@ export default function App() {
         </div>
       )}
 
+      {view === 'PERFIL_ALUNO' && selectedStudent && <PerfilAluno onBack={() => setView('DASHBOARD')} />}
       {view === 'WORKOUTS' && selectedStudent && <WorkoutSessionView user={selectedStudent} onBack={() => setView('DASHBOARD')} onSave={handleSaveData} />}
       {view === 'WORKOUT_COUNTER' && selectedStudent && <WorkoutCounterView student={selectedStudent} onBack={() => setView('DASHBOARD')} onSaveHistory={(h) => handleSaveData(selectedStudent.id, { workoutHistory: h })} />}
       {view === 'STUDENT_ASSESSMENT' && selectedStudent && <StudentAssessmentView student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
       {view === 'CORRE_RJ' && selectedStudent && <CorreRJView onBack={() => setView('DASHBOARD')} />}
       
-      {view === 'PROFESSOR_DASH' && <ProfessorDashboard students={allStudentsForCoach} onLogout={() => setView('LOGIN')} onSelect={(s) => { setSelectedStudent(s); setView('STUDENT_MGMT'); }} />}
+      {/* Updated ProfessorDashboard to handle student selection by ID via setSelectedStudentId */}
+      {view === 'PROFESSOR_DASH' && <ProfessorDashboard students={students} onLogout={() => setView('LOGIN')} onSelect={(s) => { setSelectedStudentId(s.id); setView('STUDENT_MGMT'); }} />}
       {view === 'STUDENT_MGMT' && selectedStudent && <StudentManagement student={selectedStudent} onBack={() => setView('PROFESSOR_DASH')} onNavigate={setView} onEditWorkout={setEditingWorkout} />}
       {view === 'PERIODIZATION' && selectedStudent && <PeriodizationView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onProceedToWorkout={() => { setEditingWorkout(null); setView('WORKOUT_EDITOR'); }} />}
       {view === 'COACH_ASSESSMENT' && selectedStudent && <CoachAssessmentView student={selectedStudent} onBack={() => setView('STUDENT_MGMT')} onSave={handleSaveData} />}

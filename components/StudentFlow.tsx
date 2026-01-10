@@ -16,6 +16,7 @@ import { db, appId, auth } from '../services/firebase';
 import { RunTrackStudentView } from './RunTrack';
 import { generateExerciseImage } from '../services/gemini';
 import { GoogleGenAI } from "@google/genai";
+import { useAppStore } from '../store';
 
 // --- STYLES FOR LOOP ANIMATION ---
 const animationStyles = `
@@ -86,12 +87,41 @@ interface SessionProps {
 }
 
 export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
-  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(user.workouts?.[0] || null);
+  // INTEGRAÇÃO ZUSTAND: Busca reativa para garantir sincronia
+  const { students } = useAppStore();
+  
+  // Encontra o aluno atualizado na store global
+  // Isso garante que qualquer edição feita no CoachFlow reflita aqui imediatamente
+  const currentStudent = useMemo(() => 
+    students.find(s => s.id === user.id) || user
+  , [students, user.id]);
+
+  // Filtra treinos apenas para esta aluna (lógica equivalente ao treinos.filter(t => t.studentId === id))
+  // Como nossa estrutura aninha treinos no aluno, pegamos direto do objeto
+  const workouts = useMemo(() => 
+    currentStudent.workouts || []
+  , [currentStudent]);
+
+  // Estado local para controle da sessão
+  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(workouts[0] || null);
   const [showHistoryDropdown, setShowHistoryDropdown] = useState(false);
+
+  // Sincroniza o treino selecionado se a lista mudar (ex: persistência carregada)
+  useEffect(() => {
+    if (workouts.length > 0 && !selectedWorkout) {
+        setSelectedWorkout(workouts[0]);
+    } else if (selectedWorkout) {
+        // Atualiza a referência para pegar novos exercícios se editados
+        const refreshed = workouts.find(w => w.id === selectedWorkout.id);
+        if (refreshed && refreshed !== selectedWorkout) {
+            setSelectedWorkout(refreshed);
+        }
+    }
+  }, [workouts, selectedWorkout]);
 
   const workoutCountInfo = useMemo(() => {
     if (!selectedWorkout) return { current: 0, total: 0 };
-    const history = user.workoutHistory || [];
+    const history = currentStudent.workoutHistory || [];
     const startDate = selectedWorkout.startDate ? new Date(selectedWorkout.startDate) : new Date(0);
     const endDate = selectedWorkout.endDate ? new Date(selectedWorkout.endDate) : new Date(2100, 0, 1);
     const count = history.filter(h => {
@@ -100,7 +130,7 @@ export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
        return isSame && d >= startDate && d <= endDate;
     }).length;
     return { current: count + 1, total: selectedWorkout.projectedSessions || 10 };
-  }, [user.workoutHistory, selectedWorkout]);
+  }, [currentStudent.workoutHistory, selectedWorkout]);
 
   const [completedSets, setCompletedSets] = useState<Record<string, number[]>>({});
   const [loadMap, setLoadMap] = useState<Record<string, string>>({});
@@ -113,7 +143,7 @@ export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
   const [restTotalTime, setRestTotalTime] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
 
-  const activeMicrocycle = getCurrentMicrocycle(user.periodization);
+  const activeMicrocycle = getCurrentMicrocycle(currentStudent.periodization);
 
   useEffect(() => {
     const interval = setInterval(() => { setElapsedSeconds(prev => prev + 1); }, 1000);
@@ -197,12 +227,12 @@ export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
         date: new Date().toISOString().split('T')[0],
         timestamp: Date.now()
     };
-    const analytics = user.analytics || { exercises: {}, sessionsCompleted: 0, streakDays: 0 };
+    const analytics = currentStudent.analytics || { exercises: {}, sessionsCompleted: 0, streakDays: 0 };
     analytics.sessionsCompleted += 1;
     analytics.lastSessionDate = new Date().toISOString();
     try {
-        await onSave(user.id, { 
-            workoutHistory: [...(user.workoutHistory || []), entry],
+        await onSave(currentStudent.id, { 
+            workoutHistory: [...(currentStudent.workoutHistory || []), entry],
             analytics: analytics
         });
         onBack();
@@ -228,10 +258,10 @@ export function WorkoutSessionView({ user, onBack, onSave }: SessionProps) {
             <button onClick={onBack} className="p-2 bg-zinc-900 rounded-full shadow-lg text-white text-left hover:bg-red-600 transition-colors"><ArrowLeft size={20}/></button>
             <div className="relative">
                 <h2 onClick={() => setShowHistoryDropdown(!showHistoryDropdown)} className="text-lg md:text-xl font-black italic uppercase tracking-tighter text-left truncate max-w-[200px] md:max-w-none flex items-center gap-2 cursor-pointer">{selectedWorkout?.title || "Meus Treinos"} <List size={14}/></h2>
-                {showHistoryDropdown && user.workouts && (
+                {showHistoryDropdown && workouts.length > 0 && (
                     <div className="absolute top-full left-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl z-50 w-64 overflow-hidden">
                         <p className="text-[9px] uppercase font-bold text-zinc-500 p-3 bg-black/50">Selecione o Treino</p>
-                        {user.workouts.map(w => (
+                        {workouts.map(w => (
                             <button key={w.id} onClick={() => { setSelectedWorkout(w); setShowHistoryDropdown(false); }} className="w-full text-left p-4 hover:bg-red-900/20 border-b border-white/5 last:border-0 font-bold text-xs uppercase">{w.title}</button>
                         ))}
                     </div>
