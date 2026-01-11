@@ -21,10 +21,18 @@ import { useAppStore } from '../store';
 // --- STYLES FOR LOOP ANIMATION ---
 const animationStyles = `
   @keyframes biomechanicalVideo {
-    0% { transform: scale(1) translateY(0); filter: brightness(1) contrast(1) saturate(1); }
-    40% { transform: scale(1.06) translateY(-8px); filter: brightness(1.15) contrast(1.1) saturate(1.2); }
-    60% { transform: scale(1.06) translateY(-8px); filter: brightness(1.15) contrast(1.1) saturate(1.2); }
-    100% { transform: scale(1) translateY(0); filter: brightness(1) contrast(1) saturate(1); }
+    0% { 
+      transform: scale(1) translateY(0); 
+      filter: brightness(1) contrast(1) saturate(1); 
+    }
+    50% {
+      transform: scale(1.05) translateY(-5px);
+      filter: brightness(1.1) contrast(1.1) saturate(1.2);
+    }
+    100% { 
+      transform: scale(1) translateY(0); 
+      filter: brightness(1) contrast(1) saturate(1); 
+    }
   }
   .video-motion-engine { animation: biomechanicalVideo 5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
   .video-progress-bar { height: 4px; background: #f59e0b; animation: progress 5s linear infinite; transform-origin: left; }
