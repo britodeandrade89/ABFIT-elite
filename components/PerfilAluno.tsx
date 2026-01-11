@@ -1,23 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store';
 import CardTreinoPrescrito from './CardTreinoPrescrito';
 import CardTreinoExecutado from './CardTreinoExecutado';
 import FormRegistroTreino from './FormRegistroTreino';
 import { EliteFooter, SyncStatus } from './Layout';
 import { ArrowLeft, User, TrendingUp, Watch, CalendarDays, BarChart3, ClipboardList } from 'lucide-react';
+import { Student } from '../types';
 
-const PerfilAluno = ({ onBack }: { onBack: () => void }) => {
+interface PerfilAlunoProps {
+  student: Student;
+  onBack: () => void;
+}
+
+const PerfilAluno: React.FC<PerfilAlunoProps> = ({ student, onBack }) => {
   const [mostrarForm, setMostrarForm] = useState(false);
   
-  // No modo real, pegaríamos o ID do aluno logado ou selecionado
-  const alunoId = 'fixed-andre'; 
+  // Usamos o ID do estudante passado via props (que vem do login/seleção)
+  const alunoId = student.id;
   
-  const { treinosPrescritos, treinosExecutados, students } = useAppStore();
+  const { 
+    treinosPrescritos, 
+    treinosExecutados, 
+    iniciarEscutaTempoReal, 
+    limparEscutaTempoReal 
+  } = useAppStore();
   
-  // Filtros
-  const treinosDoAluno = treinosPrescritos.filter(t => t.studentId === alunoId || !t.studentId);
+  // Ativar listeners do Firebase ao montar o componente
+  useEffect(() => {
+    if (alunoId) {
+      iniciarEscutaTempoReal(alunoId);
+    }
+    return () => {
+      limparEscutaTempoReal();
+    };
+  }, [alunoId, iniciarEscutaTempoReal, limparEscutaTempoReal]);
+
+  // Filtros de exibição
+  const treinosDoAluno = treinosPrescritos;
   const logsDoAluno = treinosExecutados;
-  const currentStudent = students.find(s => s.id === alunoId) || { nome: 'Aluno Elite', goal: 'Performance' };
 
   return (
     <div className="p-6 pb-48 animate-fadeIn text-white overflow-y-auto h-screen custom-scrollbar text-left bg-black">
@@ -40,16 +60,20 @@ const PerfilAluno = ({ onBack }: { onBack: () => void }) => {
            <div className="w-24 h-24 rounded-full border-4 border-blue-600 shadow-[0_0_30px_rgba(37,99,235,0.3)] bg-zinc-800 overflow-hidden shrink-0">
                {/* Placeholder de Imagem */}
                <div className="w-full h-full flex items-center justify-center bg-zinc-800">
-                  <span className="text-2xl font-black text-zinc-600">{currentStudent.nome?.charAt(0)}</span>
+                  {student.photoUrl ? (
+                     <img src={student.photoUrl} className="w-full h-full object-cover" alt={student.nome} />
+                  ) : (
+                     <span className="text-2xl font-black text-zinc-600">{student.nome?.charAt(0)}</span>
+                  )}
                </div>
            </div>
            <div className="flex-1">
                <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
                   <span className="bg-blue-600/20 text-blue-400 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-600/30">Atleta Elite</span>
                </div>
-               <h1 className="text-3xl md:text-4xl font-black italic uppercase text-white tracking-tighter leading-none mb-2">{currentStudent.nome}</h1>
+               <h1 className="text-3xl md:text-4xl font-black italic uppercase text-white tracking-tighter leading-none mb-2">{student.nome}</h1>
                <p className="text-zinc-400 font-bold text-xs uppercase tracking-wide flex items-center justify-center md:justify-start gap-2">
-                  <TrendingUp size={14} className="text-red-600"/> Foco: {currentStudent.goal || 'Alta Performance'}
+                  <TrendingUp size={14} className="text-red-600"/> Foco: {student.goal || 'Alta Performance'}
                </p>
            </div>
            
@@ -117,7 +141,7 @@ const PerfilAluno = ({ onBack }: { onBack: () => void }) => {
       </div>
 
       {/* Modal Form */}
-      {mostrarForm && <FormRegistroTreino onClose={() => setMostrarForm(false)} />}
+      {mostrarForm && <FormRegistroTreino onClose={() => setMostrarForm(false)} studentId={alunoId} />}
       
       <EliteFooter />
     </div>

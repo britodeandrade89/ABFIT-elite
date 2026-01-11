@@ -280,7 +280,7 @@ export default function App() {
         </div>
       )}
 
-      {view === 'PERFIL_ALUNO' && selectedStudent && <PerfilAluno onBack={() => setView('DASHBOARD')} />}
+      {view === 'PERFIL_ALUNO' && selectedStudent && <PerfilAluno student={selectedStudent} onBack={() => setView('DASHBOARD')} />}
       {view === 'WORKOUTS' && selectedStudent && <WorkoutSessionView user={selectedStudent} onBack={() => setView('DASHBOARD')} onSave={handleSaveData} />}
       {view === 'WORKOUT_COUNTER' && selectedStudent && <WorkoutCounterView student={selectedStudent} onBack={() => setView('DASHBOARD')} onSaveHistory={(h) => handleSaveData(selectedStudent.id, { workoutHistory: h })} />}
       {view === 'STUDENT_ASSESSMENT' && selectedStudent && <StudentAssessmentView student={selectedStudent} onBack={() => setView('DASHBOARD')} />}

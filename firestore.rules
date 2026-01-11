@@ -1,0 +1,52 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper para verificar autenticação
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Match para a estrutura de dados da aplicação
+    match /artifacts/{appId}/public/data {
+      
+      // TREINOS PRESCRITOS
+      match /treinosPrescritos/{treinoId} {
+        allow read: if isAuthenticated() && 
+          (request.auth.uid == resource.data.alunoId || 
+           request.auth.uid == resource.data.professorId);
+        
+        allow write: if isAuthenticated() && 
+          request.auth.uid == request.resource.data.professorId;
+          
+        allow update, delete: if isAuthenticated() && 
+          request.auth.uid == resource.data.professorId;
+      }
+      
+      // TREINOS EXECUTADOS
+      match /treinosExecutados/{treinoId} {
+        allow read: if isAuthenticated() && 
+          (request.auth.uid == resource.data.alunoId || 
+           request.auth.uid == resource.data.professorId);
+           
+        allow create: if isAuthenticated() && 
+          request.auth.uid == request.resource.data.alunoId;
+          
+        allow update: if isAuthenticated() && 
+          request.auth.uid == resource.data.alunoId;
+      }
+      
+      // USUÁRIOS / ESTUDANTES
+      match /students/{userId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated() && request.auth.uid == userId;
+      }
+      
+      // Regra genérica para outras coleções (útil para desenvolvimento)
+      match /{collection}/{document=**} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+  }
+}

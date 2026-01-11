@@ -1,22 +1,32 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Student, Workout, WorkoutHistoryEntry } from './types';
+import {
+  adicionarTreinoPrescrito,
+  adicionarTreinoExecutado,
+  atualizarTreinoPrescrito,
+  escutarTreinosPrescritos,
+  escutarTreinosExecutados
+} from './services/firebaseService';
 
 interface AppState {
-  // Gestão de Alunos (Estado Global)
+  // Gestão de Alunos (Estado Global - Legado/Coach View)
   students: Student[];
   setStudents: (students: Student[]) => void;
   updateStudent: (id: string, data: Partial<Student>) => void;
   initDefaults: () => void;
 
-  // Gestão de Treinos Prescritos (Aeróbico/Específico)
+  // Gestão de Treinos (Firebase / Real-time - Student View)
   treinosPrescritos: Workout[];
-  adicionarTreinoPrescrito: (novoTreino: Partial<Workout>) => void;
-  marcarComoConcluido: (treinoId: string) => void;
-
-  // Gestão de Treinos Executados (Logs Galaxy Watch)
   treinosExecutados: WorkoutHistoryEntry[];
-  adicionarTreinoExecutado: (novoLog: Partial<WorkoutHistoryEntry>) => void;
+  
+  unsubscribeListeners: (() => void)[];
+  iniciarEscutaTempoReal: (alunoId: string) => void;
+  limparEscutaTempoReal: () => void;
+
+  adicionarTreinoPrescrito: (novoTreino: Partial<Workout>, professorId?: string) => Promise<void>;
+  adicionarTreinoExecutado: (novoLog: Partial<WorkoutHistoryEntry>, alunoId?: string) => Promise<void>;
+  marcarComoConcluido: (treinoId: string) => Promise<void>;
 }
 
 const DEFAULT_STUDENTS: Student[] = [
@@ -28,13 +38,7 @@ const DEFAULT_STUDENTS: Student[] = [
       weightHistory: [], 
       workoutHistory: [], 
       sexo: 'Masculino',
-      workouts: [
-        {
-          id: 'treino-a-fixed',
-          title: 'Treino A',
-          exercises: [] 
-        }
-      ]
+      workouts: []
     }, 
     { 
       id: 'fixed-marcelly', 
@@ -70,71 +74,99 @@ export const useAppStore = create<AppState>()(
         if (state.students.length === 0) {
             return { students: DEFAULT_STUDENTS };
         }
-        let updated = [...state.students];
-        let changed = false;
-        DEFAULT_STUDENTS.forEach(def => {
-            if (!updated.find(s => s.id === def.id)) {
-                updated.push(def);
-                changed = true;
-            }
-        });
-        return changed ? { students: updated } : state;
+        return state;
       }),
 
-      // === TREINOS PRESCRITOS ===
-      treinosPrescritos: [
-        {
-          id: 'prescrito-1',
-          studentId: 'fixed-andre',
-          tipo: 'Corrida',
-          title: 'Treino de Limiar',
-          diasSemana: ['Seg', 'Qua', 'Sex'],
-          estimulo: 'Fartlek',
-          descricao: '10min aquecimento + 6x (3min forte / 2min leve) + 10min desaquecimento',
-          velocidade: '4:30 - 5:00 min/km',
-          intensidade: '8/10',
-          tempoTotal: '50 min',
-          observacoes: 'Manter FC na Zona 4',
-          exercises: []
-        }
-      ],
-
-      adicionarTreinoPrescrito: (novoTreino) =>
-        set((state) => ({
-          treinosPrescritos: [...state.treinosPrescritos, {
-            id: Date.now().toString(),
-            title: novoTreino.title || 'Treino Novo',
-            exercises: [],
-            ...novoTreino
-          } as Workout]
-        })),
-
-      marcarComoConcluido: (treinoId) =>
-        set((state) => ({
-          treinosPrescritos: state.treinosPrescritos.map(t =>
-            t.id === treinoId ? { ...t, concluido: true } : t
-          )
-        })),
-
-      // === TREINOS EXECUTADOS ===
+      // === FIREBASE REAL-TIME ===
+      treinosPrescritos: [],
       treinosExecutados: [],
+      unsubscribeListeners: [],
 
-      adicionarTreinoExecutado: (novoLog) =>
-        set((state) => ({
-          treinosExecutados: [...state.treinosExecutados, {
-            id: Date.now().toString(),
-            timestamp: Date.now(),
-            name: novoLog.name || 'Treino Realizado',
-            duration: novoLog.duration || '0',
-            date: new Date().toLocaleDateString('pt-BR'),
-            hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            ...novoLog
-          } as WorkoutHistoryEntry]
-        })),
+      iniciarEscutaTempoReal: (alunoId) => {
+        // Limpar listeners anteriores
+        get().limparEscutaTempoReal();
+        
+        console.log(`📡 Iniciando escuta em tempo real para: ${alunoId}`);
+
+        const unsub1 = escutarTreinosPrescritos(alunoId, (data) => {
+          set({ treinosPrescritos: data as Workout[] });
+        });
+
+        const unsub2 = escutarTreinosExecutados(alunoId, (data) => {
+          set({ treinosExecutados: data as WorkoutHistoryEntry[] });
+        });
+
+        set({ unsubscribeListeners: [unsub1, unsub2] });
+      },
+
+      limparEscutaTempoReal: () => {
+        const { unsubscribeListeners } = get();
+        unsubscribeListeners.forEach(unsub => unsub());
+        set({ unsubscribeListeners: [] });
+      },
+
+      // === AÇÕES DE TREINO ===
+
+      adicionarTreinoPrescrito: async (novoTreino, professorId = 'coach-admin') => {
+        try {
+          // Salvar no Firebase
+          await adicionarTreinoPrescrito(novoTreino, professorId);
+        } catch (error) {
+          console.error("Store addTreinoPrescrito error:", error);
+        }
+      },
+
+      adicionarTreinoExecutado: async (novoLog, alunoId) => {
+         // Fallback para ID fixo se não fornecido (retrocompatibilidade)
+         const targetId = alunoId || 'fixed-andre';
+         
+         try {
+            // Salvar no Firebase
+            const id = await adicionarTreinoExecutado(novoLog, targetId);
+            
+            // O listener atualizará o estado, mas atualizamos localmente para feedback instantâneo
+            const logEntry = {
+                id: typeof id === 'string' ? id : Date.now().toString(),
+                timestamp: Date.now(),
+                name: novoLog.name || 'Treino Realizado',
+                duration: novoLog.duration || '0',
+                date: new Date().toLocaleDateString('pt-BR'),
+                hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                ...novoLog
+            } as WorkoutHistoryEntry;
+
+            set((state) => ({
+              treinosExecutados: [logEntry, ...state.treinosExecutados]
+            }));
+
+         } catch (error) {
+            console.error("Store addTreinoExecutado error:", error);
+         }
+      },
+
+      marcarComoConcluido: async (treinoId) => {
+        try {
+           await atualizarTreinoPrescrito(treinoId, { concluido: true });
+           // Update local state optimistic
+           set((state) => ({
+             treinosPrescritos: state.treinosPrescritos.map(t =>
+               t.id === treinoId ? { ...t, concluido: true } : t
+             )
+           }));
+        } catch (error) {
+           console.error("Store concluirTreino error:", error);
+        }
+      },
     }),
     {
       name: 'abfit-elite-storage',
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ 
+          students: state.students,
+          // Persistir cache para offline
+          treinosPrescritos: state.treinosPrescritos,
+          treinosExecutados: state.treinosExecutados 
+      }),
     }
   )
 );

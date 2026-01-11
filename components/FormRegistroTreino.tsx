@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { useAppStore } from '../store';
 import { X, Save, Watch, Activity, Flame, Heart, Timer, ChevronDown, ChevronUp } from 'lucide-react';
 
-const FormRegistroTreino = ({ onClose }: { onClose: () => void }) => {
+const FormRegistroTreino = ({ onClose, studentId }: { onClose: () => void, studentId: string }) => {
   const { adicionarTreinoExecutado } = useAppStore();
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [treino, setTreino] = useState({
     tipo: 'Corrida',
@@ -41,10 +42,11 @@ const FormRegistroTreino = ({ onClose }: { onClose: () => void }) => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
-    // Cálculo automático do ritmo se não preenchido
+    // Mapping state to WorkoutHistoryEntry type and Auto-calculate Pace
     let ritmoCalculado = treino.ritmoMedio;
     if (!ritmoCalculado && treino.distancia && treino.duracao) {
         let minutos = 0;
@@ -64,25 +66,21 @@ const FormRegistroTreino = ({ onClose }: { onClose: () => void }) => {
         }
     }
 
-    // Simulação de dados se estiverem vazios (para demonstrar o card avançado)
-    // Se o usuário não quiser simulação, basta preencher 0 ou remover esta lógica.
-    // Mantendo coerência com o pedido "Veja o card avançado ser criado com TODAS as métricas"
     const dadosFinais = {
         ...treino,
+        duration: treino.duracao, // Map duracao to duration for types.ts
         ritmoMedio: ritmoCalculado,
-        passos: treino.passos || (parseFloat(treino.distancia || '0') * 1250).toFixed(0),
-        ganhoElevacao: treino.ganhoElevacao || Math.floor(Math.random() * 50).toString(),
-        perdaSuor: treino.perdaSuor || Math.floor(Math.random() * 500 + 200).toString(),
+        // Ensure numbers where expected by logic, though types allow strings.
         metricasAvancadas: {
-            assimetria: Number(treino.metricasAvancadas.assimetria || (Math.random() * 3).toFixed(1)),
-            tempoSolo: Number(treino.metricasAvancadas.tempoSolo || Math.floor(Math.random() * 50 + 200)),
-            vertical: Number(treino.metricasAvancadas.vertical || (Math.random() * 5 + 6).toFixed(1)),
-            rigidez: Number(treino.metricasAvancadas.rigidez || (Math.random() * 10 + 35).toFixed(1))
+            assimetria: Number(treino.metricasAvancadas.assimetria),
+            tempoSolo: Number(treino.metricasAvancadas.tempoSolo),
+            vertical: Number(treino.metricasAvancadas.vertical),
+            rigidez: Number(treino.metricasAvancadas.rigidez)
         }
     };
 
-    adicionarTreinoExecutado(dadosFinais);
-    // alert('✅ Treino registrado com sucesso!'); // Using UI feedback instead of alert
+    await adicionarTreinoExecutado(dadosFinais, studentId);
+    setIsSubmitting(false);
     onClose();
   };
 
@@ -139,7 +137,7 @@ const FormRegistroTreino = ({ onClose }: { onClose: () => void }) => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] font-black uppercase text-zinc-500 tracking-widest ml-1">Duração (mm:ss)</label>
+                <label className="text-[9px] font-black uppercase text-zinc-500 tracking-widest ml-1">Duração (mm:ss ou min)</label>
                 <input
                   type="text"
                   value={treino.duracao}
@@ -192,7 +190,7 @@ const FormRegistroTreino = ({ onClose }: { onClose: () => void }) => {
                  onClick={() => setShowAdvanced(!showAdvanced)}
                  className="w-full flex items-center justify-between text-[10px] font-black uppercase text-zinc-500 tracking-widest py-3 border-t border-b border-white/5 hover:bg-white/5 transition-colors px-2"
                >
-                 <span>Métricas Avançadas (Opcional)</span>
+                 <span>Métricas Avançadas (Galaxy Watch)</span>
                  {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                </button>
 
@@ -200,27 +198,35 @@ const FormRegistroTreino = ({ onClose }: { onClose: () => void }) => {
                  <div className="grid grid-cols-2 gap-4 mt-4 bg-zinc-800/20 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2">
                     <div className="space-y-1">
                       <label className="text-[8px] font-bold text-zinc-500 uppercase">FC Máxima</label>
-                      <input type="number" value={treino.fcMaxima} onChange={e => handleChange('fcMaxima', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" />
+                      <input type="number" value={treino.fcMaxima} onChange={e => handleChange('fcMaxima', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" placeholder="0" />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[8px] font-bold text-zinc-500 uppercase">Cadência</label>
-                      <input type="number" value={treino.cadenciaMedia} onChange={e => handleChange('cadenciaMedia', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" />
+                      <label className="text-[8px] font-bold text-zinc-500 uppercase">Cadência (spm)</label>
+                      <input type="number" value={treino.cadenciaMedia} onChange={e => handleChange('cadenciaMedia', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" placeholder="0" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[8px] font-bold text-zinc-500 uppercase">Elevação (m)</label>
-                      <input type="number" value={treino.ganhoElevacao} onChange={e => handleChange('ganhoElevacao', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" />
+                      <input type="number" value={treino.ganhoElevacao} onChange={e => handleChange('ganhoElevacao', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" placeholder="0" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[8px] font-bold text-zinc-500 uppercase">Perda Suor (ml)</label>
-                      <input type="number" value={treino.perdaSuor} onChange={e => handleChange('perdaSuor', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" />
+                      <input type="number" value={treino.perdaSuor} onChange={e => handleChange('perdaSuor', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" placeholder="0" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[8px] font-bold text-zinc-500 uppercase">Assimetria (%)</label>
-                      <input type="number" value={treino.metricasAvancadas.assimetria} onChange={e => handleAdvancedChange('assimetria', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" />
+                      <input type="number" step="0.1" value={treino.metricasAvancadas.assimetria} onChange={e => handleAdvancedChange('assimetria', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" placeholder="0.0" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[8px] font-bold text-zinc-500 uppercase">Tempo Solo (ms)</label>
-                      <input type="number" value={treino.metricasAvancadas.tempoSolo} onChange={e => handleAdvancedChange('tempoSolo', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" />
+                      <input type="number" value={treino.metricasAvancadas.tempoSolo} onChange={e => handleAdvancedChange('tempoSolo', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" placeholder="0" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-bold text-zinc-500 uppercase">Osc. Vertical (cm)</label>
+                      <input type="number" step="0.1" value={treino.metricasAvancadas.vertical} onChange={e => handleAdvancedChange('vertical', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" placeholder="0.0" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-bold text-zinc-500 uppercase">Rigidez (kN)</label>
+                      <input type="number" step="0.1" value={treino.metricasAvancadas.rigidez} onChange={e => handleAdvancedChange('rigidez', e.target.value)} className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white" placeholder="0.0" />
                     </div>
                  </div>
                )}
@@ -230,6 +236,7 @@ const FormRegistroTreino = ({ onClose }: { onClose: () => void }) => {
               <button
                 type="button"
                 onClick={onClose}
+                disabled={isSubmitting}
                 className="flex-1 py-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-2xl font-black uppercase text-xs transition-colors"
               >
                 Cancelar
@@ -237,9 +244,10 @@ const FormRegistroTreino = ({ onClose }: { onClose: () => void }) => {
               
               <button
                 type="submit"
-                className="flex-[2] py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-blue-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+                className="flex-[2] py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-blue-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <Save size={18} /> Salvar Treino
+                {isSubmitting ? <Activity className="animate-spin" size={18} /> : <><Save size={18} /> Salvar Treino</>}
               </button>
             </div>
           </form>
