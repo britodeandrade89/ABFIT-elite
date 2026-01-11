@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ArrowLeft, Dumbbell, CheckCircle2, HeartPulse, Trophy, 
