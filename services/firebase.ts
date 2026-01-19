@@ -4,27 +4,12 @@ import { getFirestore } from 'firebase/firestore';
 
 // Helper to get config safely
 const getFirebaseConfig = () => {
-  // Fix TS error: cast import.meta to any to access env
-  const env = (import.meta as any).env;
-
-  // 1. Try Vite Env Vars (Render / .env)
-  if (env && env.VITE_FIREBASE_API_KEY) {
-    return {
-      apiKey: env.VITE_FIREBASE_API_KEY,
-      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: env.VITE_FIREBASE_APP_ID
-    };
-  }
-
-  // 2. Fallback to Window Object (Legacy/index.html injection)
   if (typeof window !== 'undefined' && window.__firebase_config && window.__firebase_config.apiKey) {
     return window.__firebase_config;
   }
   
-  // 3. Dummy Config (Prevents crash, allows Demo Mode)
+  // Return a dummy config to allow app initialization without crashing.
+  // Auth calls will fail gracefully in App.tsx and fallback to Demo mode.
   return {
       apiKey: "dummy-api-key",
       authDomain: "dummy.firebaseapp.com",

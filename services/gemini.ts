@@ -1,145 +1,159 @@
-import { GoogleGenAI } from "@google/genai";
+
+import { GoogleGenAI, Type } from "@google/genai";
 import { NutritionProfile, MealPlan, MacroNutrients } from "../types";
 
-// Declare process for TS compatibility
-declare const process: any;
+// Inicialização segura com a chave do ambiente conforme as diretrizes
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Helper para obter a chave de forma segura no ambiente browser/vite/render
-const getApiKey = () => {
-  // 1. Prioridade: Variável de Ambiente do Vite (Render / .env)
-  // Casting import.meta para any para evitar erros de TS se types não estiverem configurados
-  const viteEnv = (import.meta as any).env;
-  if (viteEnv && viteEnv.VITE_GEMINI_API_KEY) {
-    return viteEnv.VITE_GEMINI_API_KEY;
-  }
-
-  // 2. Fallback: Polyfill window.process (definido no index.html)
-  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-    return process.env.API_KEY;
-  }
-  
-  return "";
-};
-
-const ai = new GoogleGenAI({ apiKey: getApiKey() });
-
-const GEMINI_COMPLEX_MODEL = "gemini-3-pro-preview";
-const GEMINI_FAST_MODEL = "gemini-3-flash-preview";
-const IMAGE_MODEL = "gemini-2.5-flash-image";
+// Conforme diretrizes: Pro para tarefas complexas (Periodização), Flash para tarefas básicas
+const MODEL_PRO = 'gemini-3-pro-preview';
+const MODEL_FLASH = 'gemini-3-flash-preview';
+const MODEL_IMAGE = 'gemini-2.5-flash-image';
 
 /**
- * Geração de Periodização de Nível PhD
+ * Gera um plano de periodização científica nível PhD (EEFD/UFRJ)
+ * Utiliza o modelo PRO para maior precisão em raciocínio esportivo complexo.
  */
 export async function generatePeriodizationPlan(data: any): Promise<any> {
-  const systemInstruction = `Você é um Especialista em Fisiologia do Exercício e Metodologia do Treinamento (PhD EEFD/UFRJ).
-    Sua tarefa é criar um MESOCICLO de 4 semanas extremamente técnico.
-    
-    BASE TEÓRICA OBRIGATÓRIA:
-    - Periodização Clássica (Matveev)
-    - Modelo de Cargas Concentradas (Verkhoshansky)
-    - Modelo ATR (Issurin/Kaulin)
-    - Ciência da Hipertrofia (Schoenfeld)
+  // Fix: Removed triple backticks that were breaking the template literal syntax
+  const systemInstruction = `Você é um PhD em Fisiologia do Exercício e mestre em Metodologia do Treinamento de Força.
+  Sua tarefa é criar um MESOCICLO de 4 semanas extremamente técnico e personalizado.
+  
+  CONTEXTO CIENTÍFICO OBRIGATÓRIO:
+  - Aplicação de Matveev (Carga Progressiva) e Bompa (Periodização de Força).
+  - Ajuste de PSE (Percepção Subjetiva de Esforço) conforme a fase.
+  - Otimização de volume conforme a frequência semanal do atleta.
 
-    REGRAS DE RESPOSTA:
-    - Retorne APENAS o JSON.
-    - O campo "notas_phd" deve explicar a escolha do modelo (ex: Linear vs Ondulatório).
-    - Defina claramente a relação entre Volume e Intensidade ao longo das semanas (choque, ordinária, recuperação).`;
+  REGRAS DE RESPOSTA:
+  - Responda APENAS com o objeto JSON solicitado.
+  - Não use blocos de código markdown.
+  - Use termos técnicos em português do Brasil.`;
 
-  const prompt = `Gere um plano de treinamento para:
-    Atleta: ${data.name}
-    Nível: ${data.level}
-    Objetivo: ${data.goal}
-    Modelo de Periodização: ${data.model}
-    Fase do Macrociclo: ${data.phase}
-    Frequência Semanal: ${data.daysPerWeek} dias
-    Treino Concorrente (Corrida): ${data.concurrent ? 'Sim' : 'Não'}
-    Histórico/Limitações: ${data.injuries || 'Nenhum'}
+  const prompt = `Gere uma periodização para o atleta ${data.name}.
+  Objetivo: ${data.goal}
+  Modelo: ${data.model}
+  Fase: ${data.phase}
+  Frequência: ${data.daysPerWeek} dias por semana
+  Atividade Concorrente: ${data.concurrent ? 'Sim' : 'Não'}
 
-    Retorne este formato JSON:
-    {
-      "titulo": "Nome técnico do Mesociclo",
-      "modelo_teorico": "Explicação do modelo aplicado",
-      "objetivo_longo_prazo": "Visão do Macrociclo",
-      "distribuicao_volume": "Séries por grupamento/KM semanais",
-      "estrategia_concorrente": "Gestão de interferência biológica",
-      "microciclos": [
-        {
-          "semana": 1,
-          "tipo": "Ordinária/Choque/Recuperação",
-          "foco": "Qualidade física principal",
-          "faixa_repeticoes": "Ex: 6-8 (80-85% 1RM)",
-          "pse_alvo": "Escala RPE 0-10",
-          "descricao_carga": "Progressão pretendida"
-        }
-      ],
-      "notas_phd": "Fundamentação científica detalhada"
-    }`;
+  JSON esperado:
+  {
+    "titulo": "Nome Técnico do Mesociclo",
+    "modelo_teorico": "Explicação breve do modelo aplicado",
+    "objetivo_longo_prazo": "Meta para o final do ciclo",
+    "distribuicao_volume": "Como o volume variará semanalmente",
+    "microciclos": [
+      {
+        "semana": 1,
+        "tipo": "Ordinário/Choque/Recuperação",
+        "foco": "Força/Hipertrofia/RML",
+        "faixa_repeticoes": "Ex: 8-10",
+        "pse_alvo": "Ex: 7-8",
+        "descricao_carga": "Indicação de intensidade"
+      }
+    ],
+    "notas_phd": "Recomendação biomecânica final"
+  }`;
 
   try {
     const response = await ai.models.generateContent({
-      model: GEMINI_COMPLEX_MODEL,
+      model: MODEL_PRO,
       contents: prompt,
       config: {
         systemInstruction,
-        responseMimeType: "application/json"
+        responseMimeType: "application/json",
+        temperature: 0.7,
       }
     });
 
+    // Fix: Access .text as a property, not a method as per SDK guidelines
     const text = response.text;
-    if (!text) throw new Error("Resposta vazia da IA");
-    return JSON.parse(text.replace(/```json/g, "").replace(/```/g, "").trim());
+    if (!text) return null;
+    
+    // Fix: Robust JSON parsing after trimming potential whitespace
+    const jsonStr = text.trim();
+    return JSON.parse(jsonStr);
   } catch (error) {
     console.error("Gemini Periodization Error:", error);
     return null;
   }
 }
 
-export async function callGemini(prompt: string, systemInstruction: string = "", isJson: boolean = false): Promise<any> {
+/**
+ * Gera uma imagem para o exercício especificado usando o modelo de imagem nano banana
+ */
+export async function generateExerciseImage(exerciseName: string): Promise<string | null> {
   try {
     const response = await ai.models.generateContent({
-      model: GEMINI_FAST_MODEL,
-      contents: prompt,
-      config: {
-        systemInstruction: systemInstruction || "Você é o Diretor Científico da ABFIT.",
-        responseMimeType: isJson ? "application/json" : "text/plain",
-      }
+      model: MODEL_IMAGE,
+      contents: { parts: [{ text: `Cinematic high-detail action shot of an athlete performing ${exerciseName} correctly in a professional training facility, dramatic lighting` }] },
+      config: { imageConfig: { aspectRatio: "16:9" } }
     });
-    if (isJson) {
-      return JSON.parse(response.text.replace(/```json/g, "").replace(/```/g, "").trim());
+    
+    // Fix: Iterating through candidates and parts to find the image part as per nano banana guidelines
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
+      }
     }
-    return response.text;
-  } catch (error) {
-    return isJson ? null : "Erro na conexão.";
+    return null;
+  } catch (e) { 
+    console.error("Image Gen Error:", e);
+    return null; 
   }
 }
 
-export async function generateExerciseImage(exerciseName: string): Promise<string | null> {
-  const prompt = `Muscular Black athlete executing "${exerciseName}" in a luxury high-end gym, 8k resolution, cinematic lighting, biomechanically perfect form.`;
+/**
+ * Fornece uma instrução biomecânica crucial (cue técnico)
+ */
+export async function generateTechnicalCue(exerciseName: string) {
+  try {
+    const res = await ai.models.generateContent({
+      model: MODEL_FLASH,
+      contents: { parts: [{ text: `Forneça uma instrução biomecânica crucial (cue técnico) para o exercício: ${exerciseName}` }] },
+      config: { systemInstruction: "Você é um treinador de elite especialista em biomecânica." }
+    });
+    // Fix: Access .text as a property
+    return res.text || "Mantenha o controle do movimento.";
+  } catch (e) { return "Mantenha o core ativado e a execução controlada."; }
+}
+
+/**
+ * Gera um plano alimentar AI baseado no perfil do usuário
+ */
+export async function generateAIMealPlan(profile: NutritionProfile): Promise<MealPlan | null> {
   try {
     const response = await ai.models.generateContent({
-      model: IMAGE_MODEL,
-      contents: prompt,
-      config: { imageConfig: { aspectRatio: "16:9" } }
+      model: MODEL_FLASH,
+      contents: { parts: [{ text: `Crie um plano alimentar para o objetivo: ${profile.goal}. Alvos: ${JSON.stringify(profile.dailyTargets)}` }] },
+      config: { 
+        systemInstruction: "Você é um nutricionista esportivo. Retorne um JSON de plano alimentar.",
+        responseMimeType: "application/json" 
+      }
     });
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
-    }
-    return null;
+    // Fix: Access .text as a property and handle JSON parsing safely
+    const text = response.text;
+    return text ? JSON.parse(text.trim()) : null;
   } catch (e) { return null; }
 }
 
-export async function generateBioInsight(student: any) {
-  return await callGemini(`Analise: ${student.nome}, Objetivo: ${student.goal}, Lesões: ${student.injuryHistory}. Forneça 3 cuidados biomecânicos.`, "Fisiologista Sênior");
-}
-
-export async function generateTechnicalCue(exerciseName: string) {
-  return await callGemini(`Dica técnica de ouro para: ${exerciseName}.`, "Treinador Biomecânico");
-}
-
-export async function generateAIMealPlan(profile: NutritionProfile) {
-  return await callGemini(`Plano alimentar para ${profile.goal} com restrições ${profile.restrictions}.`, "Nutricionista PhD", true);
-}
-
-export async function estimateFoodMacros(foodInput: string) {
-  return await callGemini(`Macros para: ${foodInput}`, "Analista Nutricional", true);
+/**
+ * Estima macronutrientes para um alimento específico
+ */
+export async function estimateFoodMacros(food: string): Promise<MacroNutrients | null> {
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL_FLASH,
+      contents: { parts: [{ text: `Estime macronutrientes para: ${food}` }] },
+      config: { 
+        systemInstruction: "Você é um especialista em nutrição. Retorne JSON com calorias, proteinas, carboidratos e gorduras.",
+        responseMimeType: "application/json" 
+      }
+    });
+    // Fix: Access .text as a property and handle JSON parsing safely
+    const text = response.text;
+    return text ? JSON.parse(text.trim()) : null;
+  } catch (e) { return null; }
 }

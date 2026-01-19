@@ -14,7 +14,6 @@ export interface Exercise {
 
 export interface Workout {
   id: string;
-  studentId?: string; // Campo adicionado para vínculo direto com aluno
   title: string;
   exercises: Exercise[];
   // Scheduling Fields
@@ -22,33 +21,34 @@ export interface Workout {
   endDate?: string;
   frequencyWeekly?: number;
   projectedSessions?: number; // Total calculated sessions (e.g., 10)
-  
-  // Novos campos para compatibilidade com sistema de prescrição direta
-  tipo?: string; // 'Corrida', 'Musculação', etc.
-  concluido?: boolean;
-  diasSemana?: string[];
-  estimulo?: string;
-  descricao?: string;
-  velocidade?: string;
-  intensidade?: string;
-  tempoTotal?: string;
-  observacoes?: string;
 }
 
+/**
+ * PeriodizationMicrocycle interface updated to include 'tipo' and 'descricao_carga'
+ */
 export interface PeriodizationMicrocycle {
   semana: number;
+  tipo: string;
   foco: string;
   faixa_repeticoes: string;
   pse_alvo: string;
+  descricao_carga?: string;
 }
 
+/**
+ * PeriodizationPlan interface updated to include technical fields used by AI and StudentFlow
+ */
 export interface PeriodizationPlan {
   id: string;
   titulo: string;
   startDate: string; // ISO String
-  volume_por_grupo: string;
-  detalhes_treino: string;
+  volume_por_grupo?: string;
+  detalhes_treino?: string;
+  modelo_teorico?: string;
+  objetivo_longo_prazo?: string;
+  distribuicao_volume?: string;
   microciclos: PeriodizationMicrocycle[];
+  notas_phd?: string;
   type: 'STRENGTH' | 'RUNNING';
 }
 
@@ -87,43 +87,6 @@ export interface WorkoutHistoryEntry {
   duration: string;
   date: string;
   timestamp: number;
-  
-  // Campos Avançados Galaxy Watch / Execução
-  tipo?: string;
-  hora?: string;
-  distancia?: string | number;
-  calorias?: string | number;
-  ritmoMedio?: string;
-  
-  // Fisiologia Cardíaca
-  fcMedia?: string | number;
-  fcMaxima?: string | number; // Added
-  
-  // Dinâmica de Corrida
-  cadenciaMedia?: string | number;
-  passos?: string | number;
-  
-  // Elevação e Hidratação
-  ganhoElevacao?: string | number;
-  maiorElevacao?: string | number;
-  perdaSuor?: string | number;
-
-  // Métricas Avançadas
-  metricasAvancadas?: {
-    assimetria?: number | string;
-    tempoSolo?: number | string;
-    vertical?: number | string;
-    rigidez?: number | string;
-  };
-
-  // Fisiologia
-  vo2Max?: string | number;
-  classificacaoVO2?: string;
-  porcentagemVO2?: string | number;
-  
-  // Dados Complexos
-  zonasFC?: Array<{nome: string, faixa: string, tempo: string, percentual: number}>;
-  voltas?: Array<{numero: number, tempo: string, distancia: string, ritmo: string}>;
 }
 
 export interface AppNotification {
